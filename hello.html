@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>Hello World</title>
+</head>
+<body>
+<h1 id="greeting">Hello world by Claude</h1>
+<p>日本標準時（JST）: <span id="jst-time">取得中...</span></p>
+<script>
+setTimeout(function () {
+  document.getElementById('greeting').textContent = 'Hello ai coding';
+}, 2000);
+
+// https://www.nict.go.jp/JST/JST5.html が内部で使用している時刻取得APIサーバー一覧
+var timeServers = [
+  "https://3fe5a5f690efc790d4764f1c528a4ebb89fa4168.nict.go.jp/cgi-bin/json",
+  "https://67495dde3b39c2991829589f0101ab7a035eecf5.nict.go.jp/cgi-bin/json",
+  "https://08a08e3a6edef4ba7a0c055a42d8e1ba2597f2b5.nict.go.jp/cgi-bin/json"
+];
+
+function formatJst(date) {
+  function pad(n) { return n < 10 ? '0' + n : '' + n; }
+  return date.getUTCFullYear() + '/' + pad(date.getUTCMonth() + 1) + '/' + pad(date.getUTCDate()) +
+    ' ' + pad(date.getUTCHours()) + ':' + pad(date.getUTCMinutes()) + ':' + pad(date.getUTCSeconds());
+}
+
+function updateJstTime() {
+  var el = document.getElementById('jst-time');
+  var index = 0;
+
+  function tryFetch() {
+    if (index >= timeServers.length) {
+      el.textContent = '取得失敗（通信環境をご確認ください）';
+      return;
+    }
+    var url = timeServers[index] + '?' + Date.now();
+    index++;
+    fetch(url)
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        var jstMs = data.st * 1000 + 9 * 60 * 60 * 1000;
+        el.textContent = formatJst(new Date(jstMs));
+      })
+      .catch(tryFetch);
+  }
+
+  tryFetch();
+}
+
+updateJstTime();
+setInterval(updateJstTime, 60 * 1000);
+</script>
+</body>
+</html>
