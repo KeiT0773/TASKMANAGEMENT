@@ -1,0 +1,332 @@
+/* ============================================================
+   タスク管理ボード モック用スタイル
+   色・寸法は画面イメージの認識合わせ用の仮のもの
+   ============================================================ */
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Segoe UI", "Hiragino Sans", "Meiryo", sans-serif;
+  background: #f4f5f7;
+  color: #172b4d;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---------- ヘッダー ---------- */
+.app-header {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  padding: 12px 20px;
+  background: #0052cc;
+  color: #fff;
+}
+
+.app-header h1 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.mock-note {
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+/* ---------- ボード（3リストを横並び） ---------- */
+.board {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  padding: 16px 20px;
+  min-height: 0; /* 子要素のスクロールを有効にするため */
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  background: #ebecf0;
+  border-radius: 8px;
+  min-height: 0;
+}
+
+.list-header {
+  padding: 12px 14px 8px;
+  font-weight: bold;
+  font-size: 15px;
+  display: flex;
+  justify-content: space-between;
+}
+
+.list-count {
+  font-weight: normal;
+  color: #5e6c84;
+  font-size: 13px;
+}
+
+.card-container {
+  flex: 1;
+  padding: 0 10px;
+  overflow-y: auto; /* カードが多いときはリスト内だけスクロール */
+  min-height: 40px;
+}
+
+/* ---------- カード ---------- */
+.card {
+  background: #fff;
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  box-shadow: 0 1px 2px rgba(9, 30, 66, 0.25);
+  cursor: grab;
+}
+
+.card:hover {
+  background: #f9fafc;
+}
+
+.card.dragging {
+  opacity: 0.4;
+}
+
+.card-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.card-title {
+  font-size: 14px;
+  word-break: break-all;
+}
+
+.card-due {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #5e6c84;
+  min-height: 16px; /* 期限なしでも行の高さを確保（空欄表示） */
+}
+
+.card-due.overdue {
+  color: #de350b;
+  font-weight: bold;
+}
+
+/* ドラッグ中の挿入位置プレースホルダー */
+.placeholder {
+  height: 52px;
+  margin-bottom: 8px;
+  border: 2px dashed #0052cc;
+  border-radius: 6px;
+  background: rgba(0, 82, 204, 0.08);
+}
+
+/* ---------- 優先度バッジ ---------- */
+.badge {
+  display: inline-block;
+  min-width: 28px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: bold;
+  text-align: center;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.badge-high   { background: #de350b; }
+.badge-medium { background: #ff991f; }
+.badge-low    { background: #36b37e; }
+
+/* ---------- カード追加 ---------- */
+.add-area {
+  padding: 8px 10px 10px;
+}
+
+.btn-add {
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #5e6c84;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.btn-add:hover {
+  background: #dfe1e6;
+  color: #172b4d;
+}
+
+.add-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.add-form input[type="text"] {
+  padding: 8px 10px;
+  border: 2px solid #0052cc;
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+/* 追加フォーム内の優先度選択（詳細画面のものより詰めて表示） */
+.priority-options-compact {
+  padding: 2px 4px 0;
+  gap: 10px;
+  font-size: 12px;
+}
+
+.add-form-buttons {
+  display: flex;
+  gap: 6px;
+}
+
+.btn-primary {
+  padding: 6px 14px;
+  border: none;
+  border-radius: 4px;
+  background: #0052cc;
+  color: #fff;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.btn-secondary {
+  padding: 6px 14px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: #5e6c84;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+/* ---------- SC-02 カード詳細（モーダル） ---------- */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(9, 30, 66, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.modal-overlay[hidden] {
+  display: none;
+}
+
+.modal {
+  width: 520px;
+  max-width: calc(100% - 32px);
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(9, 30, 66, 0.35);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 20px;
+  border-bottom: 1px solid #dfe1e6;
+}
+
+.modal-header h2 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.btn-close {
+  padding: 6px 12px;
+  border: 1px solid #c1c7d0;
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.modal-body {
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border: none;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+
+.field-label {
+  font-size: 12px;
+  font-weight: bold;
+  color: #5e6c84;
+}
+
+.field input[type="text"],
+.field input[type="date"],
+.field textarea {
+  padding: 8px 10px;
+  border: 1px solid #c1c7d0;
+  border-radius: 4px;
+  font-size: 14px;
+  font-family: inherit;
+}
+
+.field textarea {
+  resize: vertical;
+}
+
+.field-row {
+  display: flex;
+  gap: 24px;
+}
+
+.priority-options {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  padding-top: 6px;
+}
+
+.priority-options label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding: 12px 20px 16px;
+  border-top: 1px solid #dfe1e6;
+}
+
+.btn-delete {
+  padding: 8px 14px;
+  border: 1px solid #de350b;
+  border-radius: 4px;
+  background: #fff;
+  color: #de350b;
+  cursor: pointer;
+}
+
+.btn-delete:hover {
+  background: #de350b;
+  color: #fff;
+}

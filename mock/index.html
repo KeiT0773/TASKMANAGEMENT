@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>タスク管理ボード（モック）</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- ===== SC-01 ボード画面 ===== -->
+  <header class="app-header">
+    <h1>タスク管理ボード</h1>
+    <span class="mock-note">モック版：データはブラウザを再読み込みすると初期状態に戻ります</span>
+  </header>
+
+  <main class="board" id="board">
+    <!-- 3つのリストは JavaScript で生成する -->
+  </main>
+
+  <!-- ===== SC-02 カード詳細（ボード画面の手前に重ねて表示） ===== -->
+  <div class="modal-overlay" id="modal-overlay" hidden>
+    <div class="modal" role="dialog" aria-labelledby="modal-title">
+      <div class="modal-header">
+        <h2 id="modal-title">カード詳細</h2>
+        <button type="button" class="btn-close" id="btn-close">閉じる</button>
+      </div>
+
+      <div class="modal-body">
+        <label class="field">
+          <span class="field-label">タイトル</span>
+          <input type="text" id="detail-title" maxlength="100">
+        </label>
+
+        <label class="field">
+          <span class="field-label">説明文</span>
+          <textarea id="detail-description" rows="4" placeholder="タスクの補足説明を入力（任意）"></textarea>
+        </label>
+
+        <div class="field-row">
+          <label class="field">
+            <span class="field-label">期限</span>
+            <input type="date" id="detail-due">
+          </label>
+
+          <fieldset class="field">
+            <legend class="field-label">優先度</legend>
+            <div class="priority-options">
+              <label><input type="radio" name="priority" value="high"> <span class="badge badge-high">高</span></label>
+              <label><input type="radio" name="priority" value="medium"> <span class="badge badge-medium">中</span></label>
+              <label><input type="radio" name="priority" value="low"> <span class="badge badge-low">低</span></label>
+            </div>
+          </fieldset>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn-delete" id="btn-delete">カードを削除</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
