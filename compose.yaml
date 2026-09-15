@@ -1,0 +1,36 @@
+# ローカル開発用の PostgreSQL。
+# PC に PostgreSQL を直接インストールせず、コンテナとして起動・破棄する
+# （技術スタック 5. データベース）。
+#
+#   起動: docker compose up -d
+#   停止: docker compose stop
+#   破棄: docker compose down        （データは volume に残る）
+#   全消し: docker compose down -v   （データも消える）
+
+services:
+  db:
+    image: postgres:16
+    container_name: taskmanagement-db
+    environment:
+      # ここで指定した値が、そのまま backend の接続設定
+      # （application.properties）と対応する。ローカル開発専用の値。
+      POSTGRES_DB: taskmanagement
+      POSTGRES_USER: taskmanagement
+      POSTGRES_PASSWORD: taskmanagement
+      TZ: Asia/Tokyo
+    ports:
+      # ホスト側 5432 → コンテナ側 5432。
+      # PC に既に PostgreSQL が入っていて競合する場合は、左側の数字だけ変える。
+      - "5432:5432"
+    volumes:
+      # データの保存先。コンテナを作り直しても中身が残るようにする。
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      # PostgreSQL が「接続を受け付けられる状態」になったかを判定する。
+      test: ["CMD-SHELL", "pg_isready -U taskmanagement -d taskmanagement"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  db-data:

@@ -14,8 +14,22 @@ Trello 方式の個人用タスク管理アプリ。
 
 ## ディレクトリ構成
 
-| ディレクトリ | 内容 |
+| ディレクトリ・ファイル | 内容 |
 | --- | --- |
 | [docs/](docs/) | 要件定義書・設計書 |
 | [mock/](mock/) | 画面モック（要件確認用） |
 | [backend/](backend/) | Spring Boot アプリケーション。起動方法は [backend/README.md](backend/README.md) を参照 |
+| [compose.yaml](compose.yaml) | ローカル開発用 PostgreSQL の定義（Docker Compose） |
+
+## ローカル環境の起動
+
+```powershell
+# 1. データベース（このディレクトリで実行）
+docker compose up -d
+
+# 2. バックエンド
+cd backend
+.\gradlew bootRun
+```
+
+動作確認は http://localhost:8080/api/health/db 。詳細は [backend/README.md](backend/README.md) を参照。

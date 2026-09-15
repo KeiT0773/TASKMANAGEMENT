@@ -21,6 +21,7 @@
 | --- | --- | --- | --- |
 | 1.0 | 2026-09-13 | 初版作成 | KeiT0773 |
 | 1.1 | 2026-09-13 | バックエンドのひな形作成に伴い Spring Boot のバージョン（4.1.1）と Gradle のバージョン（9.7.1）を確定 | KeiT0773 |
+| 1.2 | 2026-09-15 | PostgreSQL 接続設定の追加に伴い、DB・Docker のバージョンを確定。Flyway の導入方法（Spring Boot 4 では専用スターターが必要）を補記 | KeiT0773 |
 
 ---
 
@@ -42,7 +43,7 @@
 | REST API | Spring Web | フロントエンドからの HTTP 要求を受け付け、JSON で応答する |
 | DB アクセス | Spring Data JPA | Java のクラスとテーブルを対応づけ、SQL を直接書かずに読み書きする。Spring Boot の標準的な組み合わせ |
 | 入力チェック | Bean Validation | 「タイトルが空なら登録しない」（FR-01）などの検証をアノテーションで宣言する |
-| DB マイグレーション | Flyway | テーブル定義の変更を SQL ファイルとして履歴管理し、アプリ起動時に自動で DB へ反映する |
+| DB マイグレーション | Flyway 12.4.0 | テーブル定義の変更を SQL ファイルとして履歴管理し、アプリ起動時に自動で DB へ反映する。Spring Boot 4 は自動設定がモジュールに分かれているため、`flyway-core` 単体ではなく `spring-boot-starter-flyway` を依存に加える必要がある（加えて PostgreSQL 用の `flyway-database-postgresql`） |
 | API 仕様書 | springdoc-openapi（Swagger UI） | API の一覧をブラウザ上で参照・試験できる。フロントエンドとの取り決めを可視化する |
 | テスト | JUnit 5 + Spring Boot Test | Spring Boot に同梱。追加の選定は不要 |
 

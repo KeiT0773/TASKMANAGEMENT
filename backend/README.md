@@ -6,8 +6,21 @@
 
 - JDK 21 がインストールされていること（`java -version` で確認）
 - Gradle のインストールは不要。同梱の Gradle Wrapper（`gradlew.bat`）が自動で取得する
+- Docker Desktop が起動していること。バックエンドは起動時に PostgreSQL へ接続するため、**先に DB を起動しておく必要がある**
 
 ## 起動方法
+
+### 1. データベースを起動する
+
+リポジトリ直下（`backend/` の1つ上）で実行する。
+
+```powershell
+docker compose up -d
+```
+
+`docker compose ps` で `STATUS` が `Up (healthy)` になれば準備完了。
+
+### 2. バックエンドを起動する
 
 このディレクトリ（`backend/`）で実行する。
 
@@ -19,11 +32,33 @@
 .\gradlew bootRun
 ```
 
-起動後、ブラウザで http://localhost:8080/api/health を開き、`{"status":"ok"}` と表示されれば成功。
-
 停止は起動したターミナルで `Ctrl+C`。
 
 > 初回は Gradle 本体と依存ライブラリのダウンロードが行われるため、数分かかる。
+
+### 3. 動作確認
+
+| URL | 期待する応答 | 確認できること |
+| --- | --- | --- |
+| http://localhost:8080/api/health | `{"status":"ok"}` | サーバーが起動し、HTTP に応答できる |
+| http://localhost:8080/api/health/db | `{"status":"ok","database":"PostgreSQL 16..."}` | バックエンドが実際に DB へ接続し、問い合わせを実行できる |
+
+`/api/health/db` がエラー（HTTP 500）になる場合は、DB が起動していないか、接続設定が `compose.yaml` と食い違っている。
+
+## データベース接続
+
+| 項目 | 値 |
+| --- | --- |
+| 接続先 | `jdbc:postgresql://localhost:5432/taskmanagement` |
+| ユーザー名 / パスワード | `taskmanagement` / `taskmanagement` |
+| 設定ファイル | `src/main/resources/application.properties` |
+| DB 側の定義 | リポジトリ直下の `compose.yaml` |
+
+接続情報はローカル開発専用のため、そのままリポジトリに含めている。サーバーへ配置する際は環境変数などに切り替える（技術スタック 8. 決定を保留する事項）。
+
+テーブルの作成・変更は **Flyway だけが行う**（`spring.jpa.hibernate.ddl-auto=none`）。SQL ファイルは `src/main/resources/db/migration/` に `V1__xxx.sql` の形式で置き、アプリ起動時に自動で適用される。
+
+> `.\gradlew build` に含まれる起動確認テストも DB へ接続するため、テスト実行前にも `docker compose up -d` が必要。
 
 ## 構成
 
@@ -36,9 +71,10 @@ backend/
     ├── main/
     │   ├── java/com/taskmanagement/backend/
     │   │   ├── BackendApplication.java   起動クラス（main メソッド）
-    │   │   └── HealthController.java     動作確認用 API（GET /api/health）
+    │   │   └── HealthController.java     動作確認用 API（GET /api/health, /api/health/db）
     │   └── resources/
-    │       └── application.properties    アプリ設定
+    │       ├── application.properties    アプリ設定（DB 接続設定を含む）
+    │       └── db/migration/             Flyway のマイグレーション SQL 置き場
     └── test/
         └── java/com/taskmanagement/backend/
             └── BackendApplicationTests.java  起動確認テスト
@@ -46,4 +82,5 @@ backend/
 
 ## 現在の状態
 
-- Spring Web のみ。データベース接続（PostgreSQL / Spring Data JPA / Flyway）は Docker Desktop 導入後に追加する。
+- Spring Web に加え、Spring Data JPA・Flyway・PostgreSQL ドライバを導入済み。バックエンドから DB へ接続できるところまで確認した。
+- テーブルはまだ1つも作っていない。`db/migration/` が空のため、DB には Flyway の管理表 `flyway_schema_history` だけが存在する。`lists` / `cards` のテーブル定義は次のステップ（基本設計）で作成する。
