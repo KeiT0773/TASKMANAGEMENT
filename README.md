@@ -10,6 +10,7 @@ Trello 方式の個人用タスク管理アプリ。
 | [機能要件書](docs/functional-requirements.md) | 機能一覧と機能ごとの詳細（FR-01〜FR-09） |
 | [画面要件書](docs/screen-requirements.md) | 画面一覧、画面構成、画面遷移、画面イメージ（SC-01, SC-02） |
 | [データ要件書](docs/data-requirements.md) | データ項目の定義、ER図、データフロー図 |
+| [データ設計書](docs/data-design.md) | テーブル定義、制約、初期データ、マイグレーション方針（基本設計） |
 | [技術スタック](docs/tech-stack.md) | 各層で使用する言語・フレームワーク・周辺ツールの選定と理由 |
 
 ## ディレクトリ構成
