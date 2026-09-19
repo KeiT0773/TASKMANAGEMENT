@@ -35,5 +35,18 @@
       "PowerShell(git push -f *)",
       "PowerShell(git push origin +*)"
     ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-main-branch.ps1\""
+          }
+        ]
+      }
+    ]
   }
 }
