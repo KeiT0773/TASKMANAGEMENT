@@ -149,6 +149,32 @@ function Get-NewBranchName($tokens, [int]$subIndex) {
 }
 
 # push されるブランチ名を取り出す
+# 削除の push かどうかを判別し、削除対象のブランチ名を返す（削除でなければ $null）
+function Get-DeletedBranchName($tokens, [int]$subIndex) {
+    $hasDeleteFlag = $false
+    $positional = @()
+    for ($i = $subIndex + 1; $i -lt $tokens.Count; $i++) {
+        $token = $tokens[$i]
+        if ($token.StartsWith('-')) {
+            if ($token -eq '--delete' -or $token -eq '-d') { $hasDeleteFlag = $true }
+            continue
+        }
+        $positional += $token.Trim('"', "'")
+    }
+
+    if ($hasDeleteFlag) {
+        if ($positional.Count -ge 2) { return ($positional[1] -replace '^refs/heads/', '') }
+        return ''
+    }
+
+    # git push origin :branch という書き方も削除を意味する
+    foreach ($item in $positional) {
+        if ($item.StartsWith(':')) { return ($item.Substring(1) -replace '^refs/heads/', '') }
+    }
+
+    return $null
+}
+
 function Get-PushedBranchName($tokens, [int]$subIndex, [string]$fallback) {
     $positional = @()
     for ($i = $subIndex + 1; $i -lt $tokens.Count; $i++) {
@@ -165,6 +191,8 @@ function Get-PushedBranchName($tokens, [int]$subIndex, [string]$fallback) {
 
     $refspec = $positional[1]
     if ($refspec -match '^refs/tags/') { return $null }
+    # git push origin :branch は削除なので命名規則の対象外
+    if ($refspec.StartsWith(':')) { return $null }
     if ($refspec.Contains(':')) { $refspec = ($refspec -split ':')[-1] }
     return ($refspec -replace '^refs/heads/', '')
 }
@@ -198,6 +226,18 @@ if ($gitCalls.Count -eq 0) { Approve }
 foreach ($call in $gitCalls) {
     $name = $call.Name
     $text = $call.Text
+
+    # ブランチの削除は main の内容を変えないため、main 保護の判定から除外する。
+    # ただし main 自身の削除は拒否する。
+    if ($name -eq 'push') {
+        $deleted = Get-DeletedBranchName $call.Tokens $call.SubIndex
+        if ($null -ne $deleted) {
+            if ($deleted -eq 'main') {
+                Deny-MainBranch "main ブランチの削除は禁止されています。（$text）"
+            }
+            continue
+        }
+    }
 
     # ブランチに関係なく、main を push 先に名指しするものは拒否
     if ($name -eq 'push' -and $text -match '\bmain\b') {
