@@ -1,4 +1,4 @@
-﻿# main ブランチを保護する PreToolUse フック
+﻿# 開発フローを守らせる PreToolUse フック
 #
 # Claude Code がシェルコマンドを実行する直前に呼ばれ、標準入力から受け取った
 # JSON の tool_input.command を検査する。開発フローに反するコマンドだった場合は
@@ -8,14 +8,28 @@
 
 $ErrorActionPreference = 'Stop'
 
+$BranchNamePattern = '^(feat|fix|docs|refactor|test|chore)/[0-9]+-[a-z0-9._-]+$'
+
+# 標準エラー出力はコンソールの既定コードページで書かれると日本語が文字化けするため、
+# UTF-8 のバイト列を直接ストリームへ書き込む。
+function Write-Stderr([string]$text) {
+    $stream = [Console]::OpenStandardError()
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes($text + "`n")
+    $stream.Write($bytes, 0, $bytes.Length)
+    $stream.Flush()
+}
+
 function Approve {
     exit 0
 }
 
-function Deny([string]$reason) {
-    $message = @"
-[開発フロー違反] $reason
+function Deny([string]$reason, [string]$guidance) {
+    Write-Stderr "[開発フロー違反] $reason`n`n$guidance`n`n詳細は docs/development-workflow.md および CLAUDE.md を参照。"
+    exit 2
+}
 
+function Deny-MainBranch([string]$reason) {
+    Deny $reason @"
 このリポジトリでは main ブランチを直接変更できません。次の手順で進めてください。
 
   1. Issue を起票する
@@ -25,7 +39,6 @@ function Deny([string]$reason) {
      git switch main
      git pull --ff-only
      git switch -c <種別>/<Issue番号>-<要約>
-     （種別は feat / fix / docs / refactor / test / chore）
 
   3. コミットして push する
      git push -u origin <ブランチ名>
@@ -34,10 +47,25 @@ function Deny([string]$reason) {
      gh pr create
 
 main への直接 push は GitHub の Ruleset でも拒否されるため、このフックを
-回避しても反映はできません。詳細は docs/development-workflow.md を参照。
+回避しても反映はできません。
 "@
-    [Console]::Error.WriteLine($message)
-    exit 2
+}
+
+function Deny-BranchName([string]$name) {
+    Deny "ブランチ名 '$name' が命名規則に合っていません。" @"
+ブランチ名は次の形式にしてください。
+
+  <種別>/<Issue番号>-<英小文字の要約>
+
+  種別: feat / fix / docs / refactor / test / chore
+  要約: 英小文字・数字・ハイフンのみ（日本語や大文字は使えません）
+
+  例: feat/12-card-create
+      fix/15-due-date-timezone
+      chore/4-setup-dev-workflow
+
+対応する Issue がまだ無い場合は、先に gh issue create で起票してください。
+"@
 }
 
 # --- 標準入力の JSON を読む -------------------------------------------------
@@ -66,7 +94,9 @@ if ([string]::IsNullOrWhiteSpace($repoDir) -or -not (Test-Path $repoDir)) {
 
 $currentBranch = ''
 try {
+    $ErrorActionPreference = 'Continue'
     $currentBranch = (& git -C $repoDir rev-parse --abbrev-ref HEAD 2>$null | Out-String).Trim()
+    $ErrorActionPreference = 'Stop'
 } catch {
     # git リポジトリでない、git が無いなどの場合は通す
     Approve
@@ -77,11 +107,14 @@ $onMain = ($currentBranch -eq 'main')
 
 # --- コマンドを区切り単位に分解して git のサブコマンドを取り出す ------------
 
-function Get-GitSubcommand([string]$segment) {
-    $text = $segment.Trim()
-    if ($text -notmatch '^git(\.exe)?(\s|$)') { return $null }
+function Get-Tokens([string]$segment) {
+    return @($segment.Trim() -split '\s+' | Where-Object { $_ -ne '' })
+}
 
-    $tokens = @($text -split '\s+' | Where-Object { $_ -ne '' })
+function Get-GitSubcommandIndex($tokens) {
+    if ($tokens.Count -eq 0) { return -1 }
+    if ($tokens[0] -notmatch '^git(\.exe)?$') { return -1 }
+
     $i = 1
     while ($i -lt $tokens.Count) {
         $token = $tokens[$i]
@@ -94,50 +127,113 @@ function Get-GitSubcommand([string]$segment) {
             }
             continue
         }
-        return $token
+        return $i
+    }
+    return -1
+}
+
+# 新しく作られるブランチ名を取り出す（git switch -c / git checkout -b）
+function Get-NewBranchName($tokens, [int]$subIndex) {
+    $sub = $tokens[$subIndex]
+    $flags = switch ($sub) {
+        'switch'   { @('-c', '-C') }
+        'checkout' { @('-b', '-B') }
+        default    { @() }
+    }
+    if ($flags.Count -eq 0) { return $null }
+
+    for ($i = $subIndex + 1; $i -lt $tokens.Count - 1; $i++) {
+        if ($flags -contains $tokens[$i]) { return $tokens[$i + 1].Trim('"', "'") }
     }
     return $null
 }
 
+# push されるブランチ名を取り出す
+function Get-PushedBranchName($tokens, [int]$subIndex, [string]$fallback) {
+    $positional = @()
+    for ($i = $subIndex + 1; $i -lt $tokens.Count; $i++) {
+        $token = $tokens[$i]
+        if ($token.StartsWith('-')) {
+            # 削除やタグの push は命名規則の対象外
+            if ($token -eq '--delete' -or $token -eq '-d' -or $token -eq '--tags') { return $null }
+            continue
+        }
+        $positional += $token.Trim('"', "'")
+    }
+
+    if ($positional.Count -lt 2) { return $fallback }
+
+    $refspec = $positional[1]
+    if ($refspec -match '^refs/tags/') { return $null }
+    if ($refspec.Contains(':')) { $refspec = ($refspec -split ':')[-1] }
+    return ($refspec -replace '^refs/heads/', '')
+}
+
 $segments = @($command -split '(?:&&|\|\||;|\r?\n|\|)')
 
-$subcommands = @()
+$gitCalls = @()
 $switchesToMain = $false
 
 foreach ($segment in $segments) {
-    $sub = Get-GitSubcommand $segment
-    if ($null -eq $sub) { continue }
-    $subcommands += [pscustomobject]@{ Name = $sub; Text = $segment.Trim() }
+    $tokens = Get-Tokens $segment
+    $subIndex = Get-GitSubcommandIndex $tokens
+    if ($subIndex -lt 0) { continue }
 
-    if (($sub -eq 'switch' -or $sub -eq 'checkout') -and $segment -match '(^|\s)main(\s|$)') {
+    $gitCalls += [pscustomobject]@{
+        Name     = $tokens[$subIndex]
+        Tokens   = $tokens
+        SubIndex = $subIndex
+        Text     = $segment.Trim()
+    }
+
+    if (($tokens[$subIndex] -eq 'switch' -or $tokens[$subIndex] -eq 'checkout') -and $segment -match '(^|\s)main(\s|$)') {
         $switchesToMain = $true
     }
 }
 
-if ($subcommands.Count -eq 0) { Approve }
+if ($gitCalls.Count -eq 0) { Approve }
 
-# --- 判定 -------------------------------------------------------------------
+# --- 判定 1: main ブランチの保護 --------------------------------------------
 
-foreach ($entry in $subcommands) {
-    $name = $entry.Name
-    $text = $entry.Text
+foreach ($call in $gitCalls) {
+    $name = $call.Name
+    $text = $call.Text
 
     # ブランチに関係なく、main を push 先に名指しするものは拒否
     if ($name -eq 'push' -and $text -match '\bmain\b') {
-        Deny "main ブランチへの直接 push は禁止されています。（$text）"
+        Deny-MainBranch "main ブランチへの直接 push は禁止されています。（$text）"
     }
 
     if ($name -eq 'push' -and $onMain) {
-        Deny "現在 main ブランチにいます。main から push することはできません。（$text）"
+        Deny-MainBranch "現在 main ブランチにいます。main から push することはできません。（$text）"
     }
 
     if ($name -eq 'commit' -and ($onMain -or $switchesToMain)) {
-        Deny "main ブランチ上でコミットすることはできません。（$text）"
+        Deny-MainBranch "main ブランチ上でコミットすることはできません。（$text）"
     }
 
     if ($name -eq 'merge' -and $onMain) {
-        Deny "main へのローカル merge は禁止されています。マージは GitHub 上の Pull Request で行ってください。（$text）"
+        Deny-MainBranch "main へのローカル merge は禁止されています。マージは GitHub 上の Pull Request で行ってください。（$text）"
     }
+}
+
+# --- 判定 2: ブランチ名の命名規則 -------------------------------------------
+#
+# GitHub の Ruleset では branch_name_pattern（メタデータ制限）が個人 Free
+# アカウントで使えないため、命名規則はここで担保する。
+
+foreach ($call in $gitCalls) {
+    $target = $null
+
+    if ($call.Name -eq 'switch' -or $call.Name -eq 'checkout') {
+        $target = Get-NewBranchName $call.Tokens $call.SubIndex
+    } elseif ($call.Name -eq 'push') {
+        $target = Get-PushedBranchName $call.Tokens $call.SubIndex $currentBranch
+    }
+
+    if ([string]::IsNullOrWhiteSpace($target)) { continue }
+    if ($target -eq 'main' -or $target -eq 'HEAD') { continue }
+    if ($target -notmatch $BranchNamePattern) { Deny-BranchName $target }
 }
 
 Approve

@@ -77,7 +77,7 @@ gh pr merge --squash
 
 例：`feat/12-card-create`、`fix/15-due-date-timezone`、`docs/18-add-api-spec`
 
-要約部分は英小文字・数字・ハイフンのみ。GitHub 側で次の正規表現により強制される。
+要約部分は英小文字・数字・ハイフンのみ。次の正規表現に適合しない名前でブランチを作ろうとすると、ローカルのフックが拒否する。
 
 ```
 ^(feat|fix|docs|refactor|test|chore)/[0-9]+-[a-z0-9._-]+$
