@@ -5,7 +5,7 @@
 | 項目 | 内容 |
 | --- | --- |
 | 文書名 | タスク管理アプリ API 設計書 |
-| 版数 | 1.0 |
+| 版数 | 1.1 |
 | 作成日 | 2026-09-20 |
 | 最終更新日 | 2026-09-20 |
 | 作成者 | KeiT0773 |
@@ -22,6 +22,7 @@
 | 版数 | 日付 | 変更内容 | 変更者 |
 | --- | --- | --- | --- |
 | 1.0 | 2026-09-20 | 初版作成。共通方針と、カード・リストの取得 API（3 本）を定義 | KeiT0773 |
+| 1.1 | 2026-09-20 | 取得 API の実装結果を反映。日時は UTC（末尾 `Z`）で返すことを明記し、応答例を修正。エラー応答の `type` が省略されること、Spring が生成する `detail` は英語になることを補記 | KeiT0773 |
 
 ---
 
@@ -35,7 +36,7 @@
 | 2 | データ形式 | 要求・応答ともに JSON（`Content-Type: application/json`） | React の `fetch` と Spring Web の標準的な組み合わせ |
 | 3 | 項目名 | camelCase（例：`listId`、`dueDate`、`displayOrder`） | JavaScript / TypeScript の慣習に合わせる。DB の snake_case（`list_id`）との変換はバックエンドが行う |
 | 4 | 日付 | `YYYY-MM-DD` の文字列（例：`"2026-09-22"`） | ISO 8601 の日付形式。`due_date`（`date` 型）に対応。時刻は持たない |
-| 5 | 日時 | ISO 8601 のオフセット付き文字列（例：`"2026-09-20T10:00:00+09:00"`） | `created_at` / `updated_at`（`timestamptz` 型）に対応。どのタイムゾーンから読んでも同じ時点を指す |
+| 5 | 日時 | ISO 8601 の UTC 表記（末尾 `Z`。例：`"2026-09-20T01:00:00.123456Z"`） | `created_at` / `updated_at`（`timestamptz` 型）に対応。DB の保存値（UTC）をそのまま返し、日本時間への変換は画面に表示するときにフロントエンドが行う（データ設計書 5.4）。秒の小数部は DB の精度（マイクロ秒）まで含む |
 | 6 | 値が無い項目 | JSON の `null` で返す。項目自体を省略しない | データ設計書 2. 方針 4（未入力は `NULL`）に対応。項目が常に存在する方がフロントエンドの型定義が単純になる |
 | 7 | 区分値 | 優先度は `high` / `medium` / `low`、リストは `todo` / `doing` / `done` を DB の値のまま返す | 表示名（高 / 中 / 低、未着手 / 作業中 / 完了）への変換はフロントエンドが行う（データ設計書 9.）。画面モック `mock/script.js` と同じ値 |
 | 8 | 識別子 | カードの `id` は数値、リストの `id` は文字列 | データ設計書 4.1・4.2 の型に対応 |
@@ -47,7 +48,6 @@
 
 ```json
 {
-  "type": "about:blank",
   "title": "Not Found",
   "status": 404,
   "detail": "カードが見つかりません: id=999",
@@ -57,11 +57,13 @@
 
 | 項目 | 内容 |
 | --- | --- |
-| `type` | エラー種別を表す URI。本バージョンでは常に `about:blank`（種別を細分化しない） |
+| `type` | エラー種別を表す URI。本バージョンでは種別を細分化せず、既定値 `about:blank` のまま省略される（省略時は `about:blank` とみなす） |
 | `title` | HTTP ステータスの標準的な名称 |
 | `status` | HTTP ステータスコード（数値） |
-| `detail` | 人が読むための説明。日本語 |
+| `detail` | 人が読むための説明。アプリが自分で投げる例外（404 など）は日本語。Spring が生成するもの（型不一致の 400 など）は英語のまま（例：`Failed to convert 'id' with value: 'abc'`） |
 | `instance` | エラーが発生した要求のパス |
+
+応答の `Content-Type` は `application/problem+json` になる。
 
 独自のエラー形式を定義しないのは、標準の形式を使えば `@RestControllerAdvice` で例外を `ProblemDetail` に変換するだけで済み、応答の組み立てコードを自前で持たなくてよいためである（[技術スタック](tech-stack.md) 2. 構成を単純に保つ方針）。
 
@@ -127,8 +129,8 @@
   "priority": "high",
   "listId": "todo",
   "displayOrder": 0,
-  "createdAt": "2026-09-20T10:00:00+09:00",
-  "updatedAt": "2026-09-20T10:00:00+09:00"
+  "createdAt": "2026-09-20T01:00:00.123456Z",
+  "updatedAt": "2026-09-20T01:00:00.123456Z"
 }
 ```
 
@@ -185,9 +187,9 @@ GET /api/cards?listId=todo
 
 ```json
 [
-  { "id": 1, "title": "資料作成", "description": "来週の定例会議で使う資料。", "dueDate": "2026-09-22", "priority": "high",   "listId": "todo",  "displayOrder": 0, "createdAt": "2026-09-20T10:00:00+09:00", "updatedAt": "2026-09-20T10:00:00+09:00" },
-  { "id": 2, "title": "買い物",   "description": "牛乳、卵、パン",           "dueDate": "2026-09-17", "priority": "medium", "listId": "todo",  "displayOrder": 1, "createdAt": "2026-09-20T10:00:00+09:00", "updatedAt": "2026-09-20T10:00:00+09:00" },
-  { "id": 4, "title": "実装",     "description": null,                        "dueDate": null,         "priority": "medium", "listId": "doing", "displayOrder": 0, "createdAt": "2026-09-20T10:00:00+09:00", "updatedAt": "2026-09-20T10:00:00+09:00" }
+  { "id": 1, "title": "資料作成", "description": "来週の定例会議で使う資料。", "dueDate": "2026-09-22", "priority": "high",   "listId": "todo",  "displayOrder": 0, "createdAt": "2026-09-20T01:00:00.123456Z", "updatedAt": "2026-09-20T01:00:00.123456Z" },
+  { "id": 2, "title": "買い物",   "description": "牛乳、卵、パン",           "dueDate": "2026-09-17", "priority": "medium", "listId": "todo",  "displayOrder": 1, "createdAt": "2026-09-20T01:00:00.123456Z", "updatedAt": "2026-09-20T01:00:00.123456Z" },
+  { "id": 4, "title": "実装",     "description": null,                        "dueDate": null,         "priority": "medium", "listId": "doing", "displayOrder": 0, "createdAt": "2026-09-20T01:00:00.123456Z", "updatedAt": "2026-09-20T01:00:00.123456Z" }
 ]
 ```
 
@@ -231,8 +233,8 @@ GET /api/cards/1
   "priority": "high",
   "listId": "todo",
   "displayOrder": 0,
-  "createdAt": "2026-09-20T10:00:00+09:00",
-  "updatedAt": "2026-09-20T10:00:00+09:00"
+  "createdAt": "2026-09-20T01:00:00.123456Z",
+  "updatedAt": "2026-09-20T01:00:00.123456Z"
 }
 ```
 
