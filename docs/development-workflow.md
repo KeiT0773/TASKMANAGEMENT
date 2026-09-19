@@ -5,7 +5,7 @@
 | 項目 | 内容 |
 | --- | --- |
 | 文書名 | タスク管理アプリ 開発フロー |
-| 版数 | 1.0 |
+| 版数 | 1.1 |
 | 作成日 | 2026-09-19 |
 | 最終更新日 | 2026-09-19 |
 | 作成者 | KeiT0773 |
@@ -21,6 +21,7 @@ Claude Code が従う機械可読なルールは [CLAUDE.md](../CLAUDE.md) に�
 | 版数 | 日付 | 変更内容 | 変更者 |
 | --- | --- | --- | --- |
 | 1.0 | 2026-09-19 | 初版作成。ブランチ規則、Issue 運用、PR 運用、ラベル定義、main ブランチ保護の方針を定義 | KeiT0773 |
+| 1.1 | 2026-09-19 | ブランチ名の命名規則が GitHub Ruleset では強制できないことが判明したため、5.1 と 7、8 の記述をローカルのフックで担保する内容に修正 | KeiT0773 |
 
 ---
 
@@ -158,7 +159,7 @@ docs/18-add-api-spec
 chore/4-setup-dev-workflow
 ```
 
-要約部分は英小文字・数字・ハイフンのみを使う。日本語や大文字は使えない。この規則は GitHub Ruleset により次の正規表現で強制され、適合しないブランチは push できない。
+要約部分は英小文字・数字・ハイフンのみを使う。日本語や大文字は使えない。この規則は次の正規表現で表され、ローカルのフックが `git switch -c` / `git checkout -b` / `git push` を検査して強制する。
 
 ```
 ^(feat|fix|docs|refactor|test|chore)/[0-9]+-[a-z0-9._-]+$
@@ -222,7 +223,15 @@ GitHub Ruleset により、`main` に対して次の制約をかけている。*
 | 削除禁止 | `main` ブランチ自体を削除できない |
 | 直線履歴 | マージコミットを作らせない |
 
-加えて、`main` 以外のすべてのブランチに対してブランチ名の正規表現を強制する Ruleset を設定している。
+### 7.1 ブランチ名を GitHub 側で強制できない理由
+
+当初はブランチ名の正規表現も Ruleset で強制する予定だったが、これに必要な `branch_name_pattern`（メタデータ制限）は個人の GitHub Free アカウントでは利用できず、API が次のように拒否した。
+
+```
+{"message":"Validation Failed","errors":["Invalid rule 'branch_name_pattern': "]}
+```
+
+そのため命名規則は、後述するローカルのフックで担保している。GitHub 側では規則に反する名前のブランチも push できてしまうが、`main` への反映は PR を経由する必要があり、その時点で気付ける。
 
 緊急時にどうしても一時的な解除が必要な場合は、GitHub のリポジトリ設定 → Rules → Rulesets から該当 Ruleset の Enforcement status を一時的に `Disabled` にする。**解除したまま放置しないこと。**
 
@@ -238,6 +247,8 @@ GitHub Ruleset により、`main` に対して次の制約をかけている。*
 | 現在のブランチが `main` で `git push` | 拒否 |
 | ブランチを問わず `git push ... origin main` | 拒否 |
 | 現在のブランチが `main` で `git merge` | 拒否 |
+| `git switch -c` / `git checkout -b` で作るブランチ名が命名規則に合わない | 拒否 |
+| `git push` の対象ブランチ名が命名規則に合わない | 拒否 |
 
 設定は `.claude/settings.json` の `hooks.PreToolUse` にある。同ファイルの `permissions.deny` には、破壊的な操作（`rm`、`git reset --hard`、force push など）の拒否リストも定義されている。
 
