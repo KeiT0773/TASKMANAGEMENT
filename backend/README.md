@@ -74,7 +74,7 @@ backend/
     │   │   └── HealthController.java     動作確認用 API（GET /api/health, /api/health/db）
     │   └── resources/
     │       ├── application.properties    アプリ設定（DB 接続設定を含む）
-    │       └── db/migration/             Flyway のマイグレーション SQL 置き場
+    │       └── db/migration/             Flyway のマイグレーション SQL（V1: テーブル定義、V2: リスト初期データ）
     └── test/
         └── java/com/taskmanagement/backend/
             └── BackendApplicationTests.java  起動確認テスト
@@ -83,4 +83,14 @@ backend/
 ## 現在の状態
 
 - Spring Web に加え、Spring Data JPA・Flyway・PostgreSQL ドライバを導入済み。バックエンドから DB へ接続できるところまで確認した。
-- テーブルはまだ1つも作っていない。`db/migration/` が空のため、DB には Flyway の管理表 `flyway_schema_history` だけが存在する。`lists` / `cards` のテーブル定義は次のステップ（基本設計）で作成する。
+- `db/migration/` に次の 2 ファイルを置き、起動時に Flyway が `lists` / `cards` テーブルとリストの初期データ 3 件（todo / doing / done）を作成する。定義の根拠は [データ設計書](../docs/data-design.md) 4.〜7. を参照。
+  - `V1__create_list_and_card_tables.sql` — テーブル定義、制約、索引
+  - `V2__insert_initial_lists.sql` — リストの初期データ
+- テーブルを読み書きする API はまだ無い。次のステップでカード・リストの取得 API を実装する。
+
+テーブルが作られたことは、次のコマンド（Git Bash）で確認できる。
+
+```bash
+docker exec taskmanagement-db psql -U taskmanagement -d taskmanagement -c '\dt'
+docker exec taskmanagement-db psql -U taskmanagement -d taskmanagement -c 'select * from lists order by display_order'
+```
