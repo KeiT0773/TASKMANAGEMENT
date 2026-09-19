@@ -42,6 +42,9 @@ docker compose up -d
 | --- | --- | --- |
 | http://localhost:8080/api/health | `{"status":"ok"}` | サーバーが起動し、HTTP に応答できる |
 | http://localhost:8080/api/health/db | `{"status":"ok","database":"PostgreSQL 16..."}` | バックエンドが実際に DB へ接続し、問い合わせを実行できる |
+| http://localhost:8080/api/lists | リスト 3 件の JSON 配列 | `lists` テーブルの内容が API で取得できる |
+| http://localhost:8080/api/cards | サンプルカード 6 件の JSON 配列（`?listId=todo` で絞り込み可） | `cards` テーブルの内容が API で取得できる |
+| http://localhost:8080/api/cards/1 | カード 1 件の JSON（存在しない id は 404） | 1 件取得とエラー応答 |
 
 `/api/health/db` がエラー（HTTP 500）になる場合は、DB が起動していないか、接続設定が `compose.yaml` と食い違っている。
 
@@ -71,13 +74,17 @@ backend/
     ├── main/
     │   ├── java/com/taskmanagement/backend/
     │   │   ├── BackendApplication.java   起動クラス（main メソッド）
-    │   │   └── HealthController.java     動作確認用 API（GET /api/health, /api/health/db）
+    │   │   ├── HealthController.java     動作確認用 API（GET /api/health, /api/health/db）
+    │   │   ├── list/                     リスト（BoardList: エンティティ、Repository、Response、Controller）
+    │   │   ├── card/                     カード（Card: エンティティ、Repository、Service、Response、Controller、例外）
+    │   │   └── common/                   GlobalExceptionHandler（例外 → ProblemDetail）
     │   └── resources/
     │       ├── application.properties    アプリ設定（DB 接続設定を含む）
-    │       └── db/migration/             Flyway のマイグレーション SQL（V1: テーブル定義、V2: リスト初期データ）
+    │       └── db/migration/             Flyway のマイグレーション SQL（V1: テーブル定義、V2: リスト初期データ、V3: サンプルカード）
     └── test/
         └── java/com/taskmanagement/backend/
-            └── BackendApplicationTests.java  起動確認テスト
+            ├── BackendApplicationTests.java  起動確認テスト
+            └── card/CardControllerTest.java  取得 API の統合テスト（実 DB に接続）
 ```
 
 ## 現在の状態
@@ -86,11 +93,20 @@ backend/
 - `db/migration/` に次の 2 ファイルを置き、起動時に Flyway が `lists` / `cards` テーブルとリストの初期データ 3 件（todo / doing / done）を作成する。定義の根拠は [データ設計書](../docs/data-design.md) 4.〜7. を参照。
   - `V1__create_list_and_card_tables.sql` — テーブル定義、制約、索引
   - `V2__insert_initial_lists.sql` — リストの初期データ
-- テーブルを読み書きする API はまだ無い。次のステップでカード・リストの取得 API を実装する。
+- `V3__insert_sample_cards.sql` で画面モックと同じサンプルカード 6 件を投入する（開発用。データ設計書 7.）。
+- カード・リストの取得 API（`GET /api/lists`、`GET /api/cards`、`GET /api/cards/{id}`）を実装済み。仕様は [API 設計書](../docs/api-design.md) を参照。登録・更新・削除は未実装。
 
 テーブルが作られたことは、次のコマンド（Git Bash）で確認できる。
 
 ```bash
 docker exec taskmanagement-db psql -U taskmanagement -d taskmanagement -c '\dt'
 docker exec taskmanagement-db psql -U taskmanagement -d taskmanagement -c 'select * from lists order by display_order'
+```
+
+API の動作は、バックエンドを起動した状態で別のターミナル（Git Bash）から確認できる。
+
+```bash
+curl http://localhost:8080/api/lists
+curl "http://localhost:8080/api/cards?listId=todo"
+curl -i http://localhost:8080/api/cards/999   # 404 と ProblemDetail
 ```
