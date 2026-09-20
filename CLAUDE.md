@@ -155,3 +155,33 @@ npm run dev
 ## 5. 文書を変更するときの約束
 
 `docs/` 配下の文書には文書情報テーブルと変更履歴テーブルがある。内容を変更したときは、**版数・最終更新日・変更履歴の 3 つを必ず更新する**こと。版数は軽微な追記なら小数点以下を、構成の変更を伴うなら整数部を上げる。
+
+---
+
+## 6. サーバー起動時のポート（必須・例外なし）
+
+サーバーは **必ず既定のポートで起動する**。ポートが使用中でも、別のポートへ逃げてはならない。
+
+| サーバー | ポート | 根拠 |
+| --- | --- | --- |
+| バックエンド（Spring Boot） | 8080 | Spring Boot の既定。`application.properties` に `server.port` は書かない |
+| フロントエンド（Vite） | 5173 | `frontend/vite.config.ts` の `server.port: 5173, strictPort: true` |
+| PostgreSQL（Docker） | 5432 | `compose.yaml` |
+
+### ポートが使用中のとき
+
+1. そのポートを占有しているプロセスを調べる（`Get-NetTCPConnection -LocalPort 5173 -State Listen` → `Get-CimInstance Win32_Process -Filter "ProcessId=<PID>"`）
+2. このアプリ自身の古いサーバー（node/vite、java/gradle）なら **停止する**。無関係のプロセスなら、何が動いているかをユーザーに伝えてから停止する
+3. 既定のポートで起動し直す
+4. ユーザーのターミナルで動いていたサーバーを止めた場合は、止めたことと起動し直す必要があることを必ず伝える
+
+手順の全文はスキル `start-dev-servers`（[.claude/skills/start-dev-servers/SKILL.md](.claude/skills/start-dev-servers/SKILL.md)）にある。サーバーを起動・再起動するときは必ずこのスキルに従う。
+
+### 禁止事項
+
+以下は [.claude/hooks/guard-ports.ps1](.claude/hooks/guard-ports.ps1)（PreToolUse フック）が実行前に拒否する。
+
+- `npx vite --port 5174`、`npm run dev -- --port 5175` のように、フロントエンドを 5173 以外で起動する
+- `./gradlew bootRun --args='--server.port=8081'`、`SERVER_PORT=8081 ...` のように、バックエンドを 8080 以外で起動する
+
+理由：プロキシ設定・README の URL・ユーザーがブラウザで開いているページはすべて既定ポートを前提にしている。別ポートで起動すると、ユーザーが見ているサーバーと Claude が確認したサーバーが別物になり、「Claude の環境では動くのにユーザーの画面では動かない」食い違いが生じる。動作確認のために Claude が立てたサーバーは、確認後に必ず停止する。

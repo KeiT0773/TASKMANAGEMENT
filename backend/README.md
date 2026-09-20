@@ -36,6 +36,16 @@ docker compose up -d
 
 > 初回は Gradle 本体と依存ライブラリのダウンロードが行われるため、数分かかる。
 
+ポートは **8080 に固定**している（Spring Boot の既定。`server.port` は設定しない）。8080 が使用中のときは `Port 8080 was already in use` で起動に失敗する。その場合は、前に起動したバックエンドが残っているので、それを止めてから起動し直す（Git Bash）。
+
+```bash
+netstat -ano | grep ":8080" | grep LISTENING   # 最後の列が PID
+taskkill //PID <PID> //F                        # そのプロセスを停止（Git Bash では // と書く）
+./gradlew bootRun
+```
+
+`--server.port` などで別のポートに変えてはいけない。フロントエンドのプロキシが 8080 前提のため、別ポートでは画面から API に届かない。
+
 ### 3. 動作確認
 
 | URL | 期待する応答 | 確認できること |
