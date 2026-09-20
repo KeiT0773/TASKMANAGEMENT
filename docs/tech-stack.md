@@ -5,7 +5,7 @@
 | 項目 | 内容 |
 | --- | --- |
 | 文書名 | タスク管理アプリ 技術スタック |
-| 版数 | 1.4 |
+| 版数 | 1.5 |
 | 作成日 | 2026-09-13 |
 | 最終更新日 | 2026-09-21 |
 | 作成者 | KeiT0773 |
@@ -24,6 +24,7 @@
 | 1.2 | 2026-09-15 | PostgreSQL 接続設定の追加に伴い、DB・Docker のバージョンを確定。Flyway の導入方法（Spring Boot 4 では専用スターターが必要）を補記 | KeiT0773 |
 | 1.3 | 2026-09-20 | フロントエンドの雛形作成に伴い、Node.js・Vite・React・TypeScript・Vitest のバージョンを確定。コード検査は Vite 8 の雛形に同梱される oxlint に変更（ESLint は同梱されなくなったため）。開発時のバックエンド接続方式（Vite のプロキシ）を追記 | KeiT0773 |
 | 1.4 | 2026-09-21 | React のバージョンを実際にインストールされた 19.3 に修正。TypeScript 7 が公開済みだが Vite の雛形に合わせて 6.0 系を据え置く方針と、追従の時期を追記 | KeiT0773 |
+| 1.5 | 2026-09-21 | スタイルの行に、CSS Modules の提供元（Vite 同梱）、処理系、使用できる CSS 機能の基準（Vite の既定ターゲットと対応ブラウザ）を追記。CSS 自体に版数が無いことを明記 | KeiT0773 |
 
 ---
 
@@ -61,7 +62,7 @@
 | バックエンドへの接続（開発時） | Vite の開発サーバーのプロキシ | `/api` で始まる要求を `http://localhost:8080` へ転送する。バックエンドに CORS 設定を追加せずに済み、将来同じサーバーから配信する形（API 設計書 2. 方針 1）と整合する。詳細は [フロントエンド設計書](frontend-design.md) 9. |
 | ドラッグ&ドロップ | @hello-pangea/dnd | 「列の間でカードを動かす」用途に特化しており、カンバン UI の実装例が豊富（FR-04, FR-05） |
 | サーバー通信 | fetch API（ブラウザ標準） | 想定データ量（カード100件程度）・利用者1名の規模では追加ライブラリを必要としない |
-| スタイル | CSS（CSS Modules） | 画面モック（`mock/style.css`）をほぼそのまま流用できる |
+| スタイル | CSS（CSS Modules、Vite 8.3 同梱） | 画面モック（`mock/style.css`）をほぼそのまま流用できる。CSS Modules は Vite が標準で処理する（内部で `postcss-modules` 9 を使用。追加パッケージ無し）。処理系は Vite の既定の postcss 8 で、Sass などのプリプロセッサや UI ライブラリは使わない。CSS 自体には版数が無い（CSS3 以降は仕様がモジュール単位で改訂されるため）。使用できる CSS 機能の基準は Vite の既定ターゲット `baseline-widely-available`（2026-01-01 時点：Chrome 111+ / Edge 111+ / Firefox 114+ / Safari 16.4+）とし、[要件定義書](requirements.md) 7. の対応ブラウザ（Chrome・Edge の最新版）を満たす |
 | コード検査・整形 | oxlint + Prettier 3 | Vite 8 の `react-ts` テンプレートは ESLint ではなく oxlint（Rust 製で高速、設定は `.oxlintrc.json`）を同梱するため、雛形に従う。整形は Prettier を追加した。ESLint の方が資料は多いが、本プロジェクトの規模では雛形の構成をそのまま使う方が単純（2. 選定方針） |
 | テスト | Vitest 5 + React Testing Library 16 | Vite と相性のよい標準的な組み合わせ。DOM の再現には jsdom を使う |
 | パッケージ管理 | npm 11 | Node.js に同梱。追加インストール不要 |
