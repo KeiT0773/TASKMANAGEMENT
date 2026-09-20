@@ -19,6 +19,8 @@ repositories {
 
 dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-webmvc'
+	// 要求 body の入力チェック（Bean Validation）。DB の制約と二重にかける（データ設計書 2. 方針 5）。
+	implementation 'org.springframework.boot:spring-boot-starter-validation'
 
 	// DB アクセス（Spring Data JPA）とテーブル定義の履歴管理（Flyway）。
 	// Flyway は flyway-core 単体ではなく starter を使う。

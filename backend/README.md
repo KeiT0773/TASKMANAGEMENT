@@ -55,6 +55,7 @@ taskkill //PID <PID> //F                        # そのプロセスを停止（
 | http://localhost:8080/api/lists | リスト 3 件の JSON 配列 | `lists` テーブルの内容が API で取得できる |
 | http://localhost:8080/api/cards | サンプルカード 6 件の JSON 配列（`?listId=todo` で絞り込み可） | `cards` テーブルの内容が API で取得できる |
 | http://localhost:8080/api/cards/1 | カード 1 件の JSON（存在しない id は 404） | 1 件取得とエラー応答 |
+| `POST http://localhost:8080/api/cards`（下記 curl 例） | `201 Created` と登録したカードの JSON | カードの登録と、登録後の優先度順並べ替え |
 
 `/api/health/db` がエラー（HTTP 500）になる場合は、DB が起動していないか、接続設定が `compose.yaml` と食い違っている。
 
@@ -85,26 +86,26 @@ backend/
     │   ├── java/com/taskmanagement/backend/
     │   │   ├── BackendApplication.java   起動クラス（main メソッド）
     │   │   ├── HealthController.java     動作確認用 API（GET /api/health, /api/health/db）
-    │   │   ├── list/                     リスト（BoardList: エンティティ、Repository、Response、Controller）
-    │   │   ├── card/                     カード（Card: エンティティ、Repository、Service、Response、Controller、例外）
-    │   │   └── common/                   GlobalExceptionHandler（例外 → ProblemDetail）
+    │   │   ├── list/                     リスト（BoardList: エンティティ、Repository、Response、Controller、例外）
+    │   │   ├── card/                     カード（Card: エンティティ、Repository、Service、Request/Response、Controller、例外）
+    │   │   └── common/                   GlobalExceptionHandler（例外・入力チェック違反 → ProblemDetail）
     │   └── resources/
     │       ├── application.properties    アプリ設定（DB 接続設定を含む）
     │       └── db/migration/             Flyway のマイグレーション SQL（V1: テーブル定義、V2: リスト初期データ、V3: サンプルカード）
     └── test/
         └── java/com/taskmanagement/backend/
             ├── BackendApplicationTests.java  起動確認テスト
-            └── card/CardControllerTest.java  取得 API の統合テスト（実 DB に接続）
+            └── card/CardControllerTest.java  カード API の統合テスト（実 DB に接続。各テスト後にロールバック）
 ```
 
 ## 現在の状態
 
-- Spring Web に加え、Spring Data JPA・Flyway・PostgreSQL ドライバを導入済み。バックエンドから DB へ接続できるところまで確認した。
+- Spring Web に加え、Spring Data JPA・Flyway・PostgreSQL ドライバ・Bean Validation（`spring-boot-starter-validation`）を導入済み。
 - `db/migration/` に次の 2 ファイルを置き、起動時に Flyway が `lists` / `cards` テーブルとリストの初期データ 3 件（todo / doing / done）を作成する。定義の根拠は [データ設計書](../docs/data-design.md) 4.〜7. を参照。
   - `V1__create_list_and_card_tables.sql` — テーブル定義、制約、索引
   - `V2__insert_initial_lists.sql` — リストの初期データ
 - `V3__insert_sample_cards.sql` で画面モックと同じサンプルカード 6 件を投入する（開発用。データ設計書 7.）。
-- カード・リストの取得 API（`GET /api/lists`、`GET /api/cards`、`GET /api/cards/{id}`）を実装済み。仕様は [API 設計書](../docs/api-design.md) を参照。登録・更新・削除は未実装。
+- カード・リストの取得 API（`GET /api/lists`、`GET /api/cards`、`GET /api/cards/{id}`）と、カードの登録 API（`POST /api/cards`）を実装済み。仕様は [API 設計書](../docs/api-design.md) を参照。登録すると、そのリスト内が優先度順（高 → 中 → 低）に並べ直され、`displayOrder` が振り直される。更新・削除・移動は未実装。
 
 テーブルが作られたことは、次のコマンド（Git Bash）で確認できる。
 
@@ -119,4 +120,17 @@ API の動作は、バックエンドを起動した状態で別のターミナ�
 curl http://localhost:8080/api/lists
 curl "http://localhost:8080/api/cards?listId=todo"
 curl -i http://localhost:8080/api/cards/999   # 404 と ProblemDetail
+```
+
+登録 API は次のように確認できる。日本語を含む body を Git Bash の `curl` に直接書くと文字コードが CP932 になり、サーバーが JSON を読めず 400（`Failed to read request`）になる。日本語を送るときは UTF-8 で保存したファイルから `--data-binary @ファイル` で送る。
+
+```bash
+# 201 Created と Location ヘッダー、登録したカードが返る（ASCII のみなら直接書ける）
+curl -i -X POST http://localhost:8080/api/cards -H "Content-Type: application/json" -d '{"title":"sample","priority":"high","listId":"todo"}'
+
+# 入力チェックエラー（400）。detail と errors を確認する
+curl -i -X POST http://localhost:8080/api/cards -H "Content-Type: application/json" -d '{"title":"   ","listId":"todo"}'
+
+# 登録後に todo が優先度順に並び、displayOrder が 0 から振り直されていることを確認する
+curl "http://localhost:8080/api/cards?listId=todo"
 ```

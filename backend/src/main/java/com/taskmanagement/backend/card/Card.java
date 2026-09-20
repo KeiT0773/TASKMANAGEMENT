@@ -17,7 +17,11 @@ import jakarta.persistence.Table;
  * - bigint（自動採番）→ Long。採番は DB が行うため IDENTITY を指定する
  * - date → LocalDate（時刻を持たない）
  * - timestamptz → OffsetDateTime（タイムゾーン付きの日時）
- * - priority は high / medium / low の文字列。列挙型への置き換えは登録 API の実装時に検討する
+ * - priority は high / medium / low の文字列。列挙型への置き換えは更新 API の実装時に判断する
+ *   （API 設計書 10. 保留事項）
+ *
+ * 値の変更は setter ではなく、操作の意味を表すメソッド（assignDisplayOrder など）を通して行う。
+ * どこからでも任意の項目を書き換えられる状態を避けるため。
  */
 @Entity
 @Table(name = "cards")
@@ -54,6 +58,33 @@ public class Card {
 
 	/** JPA がインスタンスを生成するために必要な引数なしコンストラクタ。 */
 	protected Card() {
+	}
+
+	/**
+	 * 新しいカードを作る（API 設計書 8.）。
+	 * id は DB が採番するため null のまま。description と dueDate は登録時は未設定（null）。
+	 * createdAt と updatedAt は同じ時刻にする（データ設計書 5.4）。
+	 */
+	public Card(String title, String priority, String listId, int displayOrder, OffsetDateTime now) {
+		this.title = title;
+		this.priority = priority;
+		this.listId = listId;
+		this.displayOrder = displayOrder;
+		this.createdAt = now;
+		this.updatedAt = now;
+	}
+
+	/**
+	 * 並べ替えの結果として表示順を割り当てる（データ設計書 6.）。
+	 * 値が変わるときだけ updatedAt も更新する。変わらないカードまで更新すると、
+	 * 「並べ替えで動いていないのに更新日時だけ進む」ことになるため。
+	 */
+	public void assignDisplayOrder(int displayOrder, OffsetDateTime now) {
+		if (this.displayOrder == displayOrder) {
+			return;
+		}
+		this.displayOrder = displayOrder;
+		this.updatedAt = now;
 	}
 
 	public Long getId() {

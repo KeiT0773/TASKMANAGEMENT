@@ -1,15 +1,21 @@
 package com.taskmanagement.backend.card;
 
+import java.net.URI;
 import java.util.List;
 
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import jakarta.validation.Valid;
+
 /**
- * カードの取得 API（API 設計書 6.・7.）。
+ * カードの API（API 設計書 6.・7.・8.）。
  * HTTP の要求・応答の変換だけを担当し、処理は CardService に委ねる。
  */
 @RestController
@@ -37,6 +43,19 @@ public class CardController {
 	@GetMapping("/{id}")
 	public CardResponse get(@PathVariable("id") long id) {
 		return CardResponse.from(cardService.findById(id));
+	}
+
+	/**
+	 * POST /api/cards — カードを登録し、201 Created と登録したカードを返す。
+	 * Location ヘッダーには登録したカードの URL（/api/cards/{id}）を入れる。
+	 * {@code @Valid} により、body が CardCreateRequest の入力チェックに通らなければ
+	 * このメソッドに入る前に 400 になる。
+	 */
+	@PostMapping
+	public ResponseEntity<CardResponse> create(@Valid @RequestBody CardCreateRequest request) {
+		Card card = cardService.create(request);
+		URI location = URI.create("/api/cards/" + card.getId());
+		return ResponseEntity.created(location).body(CardResponse.from(card));
 	}
 
 }
