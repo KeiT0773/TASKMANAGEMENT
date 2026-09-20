@@ -1,10 +1,13 @@
-import styles from './App.module.css';
+import { AppHeader } from './components/AppHeader/AppHeader';
+import { Board } from './components/Board/Board';
 
+/** 画面全体。ヘッダーとボードを縦に並べる */
 function App() {
   return (
-    <header className={styles.header}>
-      <h1 className={styles.title}>タスク管理ボード</h1>
-    </header>
+    <>
+      <AppHeader />
+      <Board />
+    </>
   );
 }
 
