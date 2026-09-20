@@ -5,9 +5,9 @@
 | 項目 | 内容 |
 | --- | --- |
 | 文書名 | タスク管理アプリ 開発フロー |
-| 版数 | 1.2 |
+| 版数 | 1.3 |
 | 作成日 | 2026-09-19 |
-| 最終更新日 | 2026-09-19 |
+| 最終更新日 | 2026-09-21 |
 | 作成者 | KeiT0773 |
 | ステータス | 確定 |
 | 関連文書 | [要件定義書](requirements.md)、[CLAUDE.md](../CLAUDE.md) |
@@ -23,6 +23,7 @@ Claude Code が従う機械可読なルールは [CLAUDE.md](../CLAUDE.md) に�
 | 1.0 | 2026-09-19 | 初版作成。ブランチ規則、Issue 運用、PR 運用、ラベル定義、main ブランチ保護の方針を定義 | KeiT0773 |
 | 1.1 | 2026-09-19 | ブランチ名の命名規則が GitHub Ruleset では強制できないことが判明したため、5.1 と 7、8 の記述をローカルのフックで担保する内容に修正 | KeiT0773 |
 | 1.2 | 2026-09-19 | フックがリモートブランチの削除を誤って拒否していたため、8 の判定表に削除の扱いを追記 | KeiT0773 |
+| 1.3 | 2026-09-21 | サーバーを既定以外のポートで起動するコマンドを拒否するフック（`guard-ports.ps1`）を追加したため、8 に判定を追記。フックのファイル名の誤記（`.sh` → `.ps1`）を修正 | KeiT0773 |
 
 ---
 
@@ -45,7 +46,7 @@ Claude Code が従う機械可読なルールは [CLAUDE.md](../CLAUDE.md) に�
 | 層 | 仕組み | 効果 |
 | --- | --- | --- |
 | 規約 | [CLAUDE.md](../CLAUDE.md)、本書 | 何をすべきかを定義する |
-| ローカル | `.claude/hooks/guard-main-branch.sh`（PreToolUse フック） | `main` 上での commit / push / merge を実行前に拒否する |
+| ローカル | `.claude/hooks/guard-main-branch.ps1`（PreToolUse フック） | `main` 上での commit / push / merge を実行前に拒否する |
 | リモート | GitHub Ruleset | 規約に反する push を GitHub 側が受け付けない |
 
 ローカルのフックは「間違いに早く気付くため」、GitHub の Ruleset は「最終的に絶対に通さないため」にある。フックを無効化しても Ruleset は回避できない。
@@ -240,7 +241,11 @@ GitHub Ruleset により、`main` に対して次の制約をかけている。*
 
 ## 8. ローカルのフック
 
-`.claude/hooks/guard-main-branch.sh` は Claude Code の PreToolUse フックとして動作し、シェルコマンドの実行前に内容を検査する。次の場合にコマンドを実行せず拒否する。
+`.claude/hooks/` の PowerShell スクリプトは Claude Code の PreToolUse フックとして動作し、シェルコマンドの実行前に内容を検査する。フックは 2 つある。
+
+### 8.1 開発フローの保護（`guard-main-branch.ps1`）
+
+次の場合にコマンドを実行せず拒否する。
 
 | 条件 | 判定 |
 | --- | --- |
@@ -252,6 +257,20 @@ GitHub Ruleset により、`main` に対して次の制約をかけている。*
 | `git push` の対象ブランチ名が命名規則に合わない | 拒否 |
 | ブランチ削除の push（`--delete` / `-d` / `:branch`）| 許可（ただし `main` の削除は拒否）|
 
+### 8.2 サーバーのポート固定（`guard-ports.ps1`）
+
+サーバーは必ず既定のポート（バックエンド 8080、フロントエンド 5173）で起動する、という規則（[CLAUDE.md](../CLAUDE.md) 6.）を担保する。ポートが使用中のときは別のポートへ逃げるのではなく、占有しているプロセスを停止してから既定のポートで起動し直す。手順はスキル `.claude/skills/start-dev-servers/SKILL.md` に定義されている。
+
+| 条件 | 判定 |
+| --- | --- |
+| `vite` / `npm run dev` / `npm start` に `--port <n>` または `--port=<n>` があり、`n` が 5173 でない | 拒否 |
+| `gradlew bootRun` / `spring-boot:run` / `java -jar` に `server.port=<n>` または `SERVER_PORT=<n>` があり、`n` が 8080 でない | 拒否 |
+| 上記以外（ポート指定なし、または既定ポートを明示） | 許可 |
+
+フックによる拒否とは別に、`frontend/vite.config.ts` の `strictPort: true` により、5173 が使用中のときは Vite 自身が別ポートへ移らずに起動を失敗させる。Spring Boot は元々ポートが使用中なら起動に失敗する。
+
+### 8.3 共通事項
+
 設定は `.claude/settings.json` の `hooks.PreToolUse` にある。同ファイルの `permissions.deny` には、破壊的な操作（`rm`、`git reset --hard`、force push など）の拒否リストも定義されている。
 
-このフックは Claude Code 経由のコマンドにのみ作用する。人が直接ターミナルで実行する場合は GitHub 側の Ruleset が最後の砦になる。
+これらのフックは Claude Code 経由のコマンドにのみ作用する。人が直接ターミナルで実行する場合、開発フローについては GitHub 側の Ruleset が最後の砦になる。

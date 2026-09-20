@@ -27,6 +27,16 @@ npm run dev
 
 http://localhost:5173 をブラウザで開く。ソースを保存すると画面が自動で更新される。停止は起動したターミナルで `Ctrl+C`。
 
+ポートは **5173 に固定**している（`vite.config.ts` の `strictPort: true`）。5173 が使用中のときは、別のポートへ移らずに `Port 5173 is already in use` で起動に失敗する。その場合は、前に起動した開発サーバーが残っているので、それを止めてから起動し直す（Git Bash）。
+
+```bash
+netstat -ano | grep ":5173" | grep LISTENING   # 最後の列が PID
+taskkill //PID <PID> //F                        # そのプロセスを停止（Git Bash では // と書く）
+npm run dev
+```
+
+`--port` で別のポートを指定してはいけない。プロキシや README の URL が 5173 前提のため、別ポートでは正しく動作確認できない。
+
 ### 3. 動作確認
 
 | URL                              | 期待する表示                 | 確認できること                                                                   |
