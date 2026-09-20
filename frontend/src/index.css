@@ -1,0 +1,24 @@
+/* グローバルスタイル。全体に効かせる指定だけを置き、
+   各コンポーネントの見た目は CSS Modules（*.module.css）に持たせる。
+   値は画面モック（mock/style.css）と同じ。 */
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: 'Segoe UI', 'Hiragino Sans', 'Meiryo', sans-serif;
+  background: #f4f5f7;
+  color: #172b4d;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+#root {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}

@@ -23,6 +23,7 @@ Trello 方式の個人用タスク管理アプリ。
 | [docs/](docs/) | 要件定義書・設計書 |
 | [mock/](mock/) | 画面モック（要件確認用） |
 | [backend/](backend/) | Spring Boot アプリケーション。起動方法は [backend/README.md](backend/README.md) を参照 |
+| [frontend/](frontend/) | React アプリケーション。起動方法は [frontend/README.md](frontend/README.md) を参照 |
 | [compose.yaml](compose.yaml) | ローカル開発用 PostgreSQL の定義（Docker Compose） |
 | [CLAUDE.md](CLAUDE.md) | Claude Code がこのリポジトリで従う開発ルール |
 | [.github/](.github/) | Issue テンプレート・PR テンプレート |
@@ -36,9 +37,14 @@ docker compose up -d
 # 2. バックエンド
 cd backend
 ./gradlew bootRun
+
+# 3. フロントエンド（別のターミナルで）
+cd frontend
+npm install   # 初回のみ
+npm run dev
 ```
 
-動作確認は http://localhost:8080/api/health/db 。詳細は [backend/README.md](backend/README.md) を参照。
+画面は http://localhost:5173 。バックエンドの動作確認は http://localhost:8080/api/health/db 。詳細は [backend/README.md](backend/README.md)、[frontend/README.md](frontend/README.md) を参照。
 
 ## 開発の進め方
 

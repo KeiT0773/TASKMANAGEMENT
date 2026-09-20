@@ -21,7 +21,7 @@ Trello 方式の個人用タスク管理アプリ。Web アプリケーション
 | [技術スタック](docs/tech-stack.md) | 各層で使用する言語・フレームワーク・周辺ツールの選定と理由 |
 | [開発フロー](docs/development-workflow.md) | Issue・ブランチ・PR の運用ルール |
 
-構成は `docs/`（要件定義書・設計書）、`mock/`（画面モック）、`backend/`（Spring Boot）、`compose.yaml`（ローカル開発用 PostgreSQL）。
+構成は `docs/`（要件定義書・設計書）、`mock/`（画面モック）、`backend/`（Spring Boot）、`frontend/`（React + Vite）、`compose.yaml`（ローカル開発用 PostgreSQL）。
 
 ---
 
@@ -142,9 +142,13 @@ docker compose up -d
 # 2. バックエンド
 cd backend
 ./gradlew bootRun
+
+# 3. フロントエンド（別のターミナルで）
+cd frontend
+npm run dev
 ```
 
-動作確認は http://localhost:8080/api/health/db 。詳細は [backend/README.md](backend/README.md) を参照。
+画面は http://localhost:5173 。バックエンドの動作確認は http://localhost:8080/api/health/db 。詳細は [backend/README.md](backend/README.md)、[frontend/README.md](frontend/README.md) を参照。
 
 ---
 
