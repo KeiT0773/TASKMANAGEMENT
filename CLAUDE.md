@@ -17,6 +17,7 @@ Trello 方式の個人用タスク管理アプリ。Web アプリケーション
 | [データ要件書](docs/data-requirements.md) | データ項目の定義、ER図、データフロー図 |
 | [データ設計書](docs/data-design.md) | テーブル定義、制約、初期データ、マイグレーション方針 |
 | [API 設計書](docs/api-design.md) | REST API の一覧、共通方針、要求・応答の JSON 形式 |
+| [フロントエンド設計書](docs/frontend-design.md) | コンポーネント構成、状態の持ち方、API 呼び出しの方針、表示ルール |
 | [技術スタック](docs/tech-stack.md) | 各層で使用する言語・フレームワーク・周辺ツールの選定と理由 |
 | [開発フロー](docs/development-workflow.md) | Issue・ブランチ・PR の運用ルール |
 
