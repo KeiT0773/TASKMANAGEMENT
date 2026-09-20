@@ -1,5 +1,4 @@
-/* ヘッダー（画面モック mock/style.css の .app-header と同じ）。
-   ボード表示の実装時に AppHeader コンポーネントへ移す。 */
+/* 画面モック mock/style.css の .app-header */
 
 .header {
   display: flex;
