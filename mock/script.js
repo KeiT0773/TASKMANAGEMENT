@@ -27,11 +27,14 @@ let cards = [
   { id: 2, listId: 'todo',  title: '買い物',   description: '牛乳、卵、パン',                                     due: dateFromToday(-3), priority: 'medium' },
   { id: 3, listId: 'todo',  title: '読書',     description: '',                                                    due: '',                priority: 'low' },
   { id: 4, listId: 'doing', title: '実装',     description: 'ログイン画面のバリデーションを追加する',              due: dateFromToday(7),  priority: 'medium' },
+  { id: 7, listId: 'doing', title: '設計レビュー', description: '',                                                due: dateFromToday(1),  priority: 'high' },
   { id: 5, listId: 'done',  title: '掃除',     description: '',                                                    due: '',                priority: 'low' },
   { id: 6, listId: 'done',  title: '返信',     description: '田中さんへのメール返信',                              due: dateFromToday(-2), priority: 'medium' },
 ];
+// 「作業中」と「完了」はあえて優先度順になっていない（低・中が高より上）。
+// ツールバーの「優先度順に並べ替え」を押すと変化が分かる（FR-10）。
 
-let nextId = 7;
+let nextId = 8;
 
 // ---------- 日付ユーティリティ ----------
 function toDateString(d) {
@@ -65,6 +68,11 @@ function sortListByPriority(listId) {
   const rest = cards.filter((c) => c.listId !== listId);
   target.sort((a, b) => PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority]);
   cards = [...rest, ...target];
+}
+
+// 全リストを優先度順に並べ直す（FR-10）。同じ優先度の中の順序は sortListByPriority が保つ。
+function sortAllByPriority() {
+  LISTS.forEach((list) => sortListByPriority(list.id));
 }
 
 // ---------- ボード描画 ----------
@@ -325,6 +333,12 @@ document.addEventListener('keydown', (e) => {
 document.getElementById('btn-delete').addEventListener('click', () => {
   cards = cards.filter((c) => c.id !== editingCardId);
   closeDetail();
+  renderBoard();
+});
+
+// ---------- ツールバー：全リストの優先度順並べ替え（FR-10） ----------
+document.getElementById('btn-sort').addEventListener('click', () => {
+  sortAllByPriority();
   renderBoard();
 });
 

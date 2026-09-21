@@ -13,6 +13,12 @@
     <span class="mock-note">モック版：データはブラウザを再読み込みすると初期状態に戻ります</span>
   </header>
 
+  <!-- ツールバー：全リスト共通の操作を置く。リストの枠の外（FR-10） -->
+  <div class="toolbar">
+    <button type="button" class="btn-sort" id="btn-sort">優先度順に並べ替え</button>
+    <span class="toolbar-note">3つのリストすべてを 高 → 中 → 低 の順に並べ直します（同じ優先度の中の順序は変わりません）</span>
+  </div>
+
   <main class="board" id="board">
     <!-- 3つのリストは JavaScript で生成する -->
   </main>
