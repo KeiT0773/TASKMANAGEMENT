@@ -1,5 +1,5 @@
 // API 呼び出しの共通処理（フロントエンド設計書 6.）。
-// 個々の API（lists.ts, cards.ts）はここの apiGet を呼ぶだけの薄い関数にする。
+// 個々の API（lists.ts, cards.ts）はここの apiGet / apiPost を呼ぶだけの薄い関数にする。
 
 /** RFC 9457 Problem Details（API 設計書 2.1）。type は省略される */
 interface ProblemDetail {
@@ -28,10 +28,27 @@ export class ApiError extends Error {
  * GET 要求を送り、応答の JSON を T として返す。
  * パスは '/api/cards' のように相対で指定する（開発時は Vite のプロキシがバックエンドへ転送する）。
  */
-export async function apiGet<T>(path: string): Promise<T> {
+export function apiGet<T>(path: string): Promise<T> {
+  return request<T>(path, { method: 'GET' });
+}
+
+/**
+ * POST 要求を送り、応答の JSON を T として返す。
+ * body は JSON に変換して送る。201 Created も 2xx なので成功として扱う。
+ */
+export function apiPost<TBody, T>(path: string, body: TBody): Promise<T> {
+  return request<T>(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
+/** GET と POST に共通する、fetch の実行と応答の判定 */
+async function request<T>(path: string, init: RequestInit): Promise<T> {
   let res: Response;
   try {
-    res = await fetch(path);
+    res = await fetch(path, init);
   } catch {
     // fetch 自体が失敗するのは、サーバーに到達できなかったとき
     throw new ApiError(null, 'サーバーに接続できません');

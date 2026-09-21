@@ -6,3 +6,6 @@ export const PRIORITY_LABEL: Record<Priority, string> = {
   medium: '中',
   low: '低',
 };
+
+/** 優先度の並び順（高 → 中 → 低）。追加フォームの選択肢の順序に使う（フロントエンド設計書 8.1） */
+export const PRIORITIES: readonly Priority[] = ['high', 'medium', 'low'];
