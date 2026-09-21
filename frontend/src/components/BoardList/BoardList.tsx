@@ -1,3 +1,4 @@
+import { Droppable } from '@hello-pangea/dnd';
 import type {
   BoardList as BoardListData,
   Card as CardData,
@@ -19,6 +20,7 @@ interface Props {
 
 /**
  * 1 つのリスト（列）。見出しと件数、カードの一覧、最下部に追加フォームを縦に並べる（SC-01）。
+ * カード一覧の領域はドロップ先（Droppable、droppableId = list.id）。
  * 追加フォームはスクロールする領域（.cards）の外に置き、カードが多くても常に見えるようにする。
  */
 export function BoardList({ list, cards, onAddCard, onCardClick }: Props) {
@@ -28,11 +30,17 @@ export function BoardList({ list, cards, onAddCard, onCardClick }: Props) {
         <span>{list.name}</span>
         <span className={styles.count}>{cards.length}件</span>
       </div>
-      <div className={styles.cards}>
-        {cards.map((card) => (
-          <Card key={card.id} card={card} onClick={() => onCardClick(card.id)} />
-        ))}
-      </div>
+      <Droppable droppableId={list.id}>
+        {(provided) => (
+          <div ref={provided.innerRef} {...provided.droppableProps} className={styles.cards}>
+            {cards.map((card, index) => (
+              <Card key={card.id} card={card} index={index} onClick={() => onCardClick(card.id)} />
+            ))}
+            {/* ドラッグ中に隙間を作るための要素。Droppable の子の末尾に必ず置く */}
+            {provided.placeholder}
+          </div>
+        )}
+      </Droppable>
       <AddCardForm listId={list.id} onSubmit={onAddCard} />
     </section>
   );

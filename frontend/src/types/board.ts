@@ -48,3 +48,12 @@ export interface CardUpdateInput {
   dueDate: string | null;
   priority: Priority;
 }
+
+/**
+ * カード移動・並べ替えの要求 body（API 設計書 10.）。
+ * displayOrder は移動先リストで「自分を除いた並びの何番目か」（0 始まり）。D&D ライブラリの destination.index と同じ
+ */
+export interface CardMoveInput {
+  listId: ListId;
+  displayOrder: number;
+}

@@ -15,3 +15,28 @@
   padding: 24px 20px;
   color: #5e6c84;
 }
+
+/* 移動に失敗したときの文言（フロントエンド設計書 2. 方針 7）。ボードの上部に出す */
+.notice {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin: 12px 20px 0;
+  padding: 10px 14px;
+  border: 1px solid #de350b;
+  border-radius: 6px;
+  background: #ffebe6;
+  color: #de350b;
+  font-size: 13px;
+}
+
+.noticeClose {
+  padding: 4px 10px;
+  border: 1px solid #de350b;
+  border-radius: 4px;
+  background: #fff;
+  color: #de350b;
+  font-size: 12px;
+  cursor: pointer;
+}

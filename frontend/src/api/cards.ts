@@ -1,5 +1,5 @@
 import { apiGet, apiPost, apiPut } from './client';
-import type { Card, CardCreateInput, CardUpdateInput, ListId } from '../types/board';
+import type { Card, CardCreateInput, CardMoveInput, CardUpdateInput, ListId } from '../types/board';
 
 /**
  * GET /api/cards — カードを listId, displayOrder の昇順で取得する（API 設計書 6.）。
@@ -25,4 +25,12 @@ export function createCard(input: CardCreateInput): Promise<Card> {
  */
 export function updateCard(id: number, input: CardUpdateInput): Promise<Card> {
   return apiPut<CardUpdateInput, Card>(`/api/cards/${id}`, input);
+}
+
+/**
+ * PUT /api/cards/{id}/position — 別のリストへ移動、または同じリスト内で並べ替える（API 設計書 10.）。
+ * 移動元・移動先の displayOrder が振り直されるため、呼び出し側は両リストを getCards(listId) で取り直すこと。
+ */
+export function moveCard(id: number, input: CardMoveInput): Promise<Card> {
+  return apiPut<CardMoveInput, Card>(`/api/cards/${id}/position`, input);
 }
