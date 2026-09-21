@@ -24,6 +24,7 @@ body:
         - FR-07 期限の設定
         - FR-08 優先度の設定
         - FR-09 データ保存
+        - FR-10 全リストの優先度順並べ替え
         - 該当なし（新規）
     validations:
       required: true
