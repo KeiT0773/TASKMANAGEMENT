@@ -18,7 +18,7 @@ import jakarta.persistence.Table;
  * - date → LocalDate（時刻を持たない）
  * - timestamptz → OffsetDateTime（タイムゾーン付きの日時）
  * - priority は high / medium / low の文字列。列挙型への置き換えは更新 API の実装時に判断する
- *   （API 設計書 12. 保留事項）
+ *   （API 設計書 13. 保留事項）
  *
  * 値の変更は setter ではなく、操作の意味を表すメソッド（assignDisplayOrder など）を通して行う。
  * どこからでも任意の項目を書き換えられる状態を避けるため。

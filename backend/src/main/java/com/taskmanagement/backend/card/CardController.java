@@ -3,6 +3,7 @@ package com.taskmanagement.backend.card;
 import java.net.URI;
 import java.util.List;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -11,12 +12,13 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import jakarta.validation.Valid;
 
 /**
- * カードの API（API 設計書 6.〜10.）。
+ * カードの API（API 設計書 6.〜11.）。
  * HTTP の要求・応答の変換だけを担当し、処理は CardService に委ねる。
  */
 @RestController
@@ -75,6 +77,17 @@ public class CardController {
 	@PutMapping("/{id}/position")
 	public CardResponse move(@PathVariable("id") long id, @Valid @RequestBody CardMoveRequest request) {
 		return CardResponse.from(cardService.move(id, request));
+	}
+
+	/**
+	 * POST /api/cards/sort — すべてのリストのカードを優先度順に並べ直し、204 No Content を返す。
+	 * 「並べ替える」は取得・作成・更新・削除のどれでもない操作なので、コレクションの下に動詞を置く形にしている
+	 * （API 設計書 決定事項 No.17）。POST /api/cards（登録）とはパスが違うので衝突しない。
+	 */
+	@PostMapping("/sort")
+	@ResponseStatus(HttpStatus.NO_CONTENT)
+	public void sort() {
+		cardService.sortAllByPriority();
 	}
 
 }

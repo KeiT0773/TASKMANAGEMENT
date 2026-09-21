@@ -9,6 +9,7 @@ import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.taskmanagement.backend.list.BoardList;
 import com.taskmanagement.backend.list.BoardListNotFoundException;
 import com.taskmanagement.backend.list.BoardListRepository;
 
@@ -140,6 +141,21 @@ public class CardService {
 		return card;
 	}
 
+	/**
+	 * すべてのリストのカードを、それぞれのリスト内で優先度順に並べ直す（API 設計書 11.「処理」、FR-10）。
+	 * 各リストで resortByPriority を呼ぶだけで、「操作したカード」は無いので末尾に置くカードも無い。
+	 * 同じ優先度の中は今の順序が保たれる（安定ソート）。3 リスト分を 1 つのトランザクションで行う。
+	 * 既に並んでいるリストでは displayOrder が変わらないので、何回呼んでも結果は同じ。
+	 */
+	@Transactional
+	public void sortAllByPriority() {
+		OffsetDateTime now = now();
+		for (BoardList list : boardListRepository.findAllByOrderByDisplayOrderAsc()) {
+			List<Card> cards = cardRepository.findByListIdOrderByDisplayOrderAsc(list.getId());
+			resortByPriority(cards, now);
+		}
+	}
+
 	/** DB（timestamptz）の精度に合わせ、現在時刻をマイクロ秒に丸めて返す（API 設計書 2. 方針 5）。 */
 	private static OffsetDateTime now() {
 		return OffsetDateTime.now(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
@@ -153,7 +169,8 @@ public class CardService {
 	/**
 	 * 1 つのリストのカードを 高 → 中 → 低 に並べ直し、displayOrder を 0 から振り直す（機能要件書 3.1、データ設計書 6.）。
 	 * List.sort は安定ソート（同じ優先度どうしは元の順序を保つ）なので、操作したカードを末尾に置いてから呼べば
-	 * 同じ優先度グループの末尾に入る。
+	 * 同じ優先度グループの末尾に入る（登録・優先度変更）。置かずに呼べば、同じ優先度の中は今の順序のまま
+	 * 優先度のまとまりだけを直す（全リストの一括並べ替え）。
 	 * 既存のカードは JPA の管理下にあるため、値が変わったものはトランザクションの終了時に UPDATE される。
 	 */
 	private void resortByPriority(List<Card> cards, OffsetDateTime now) {
