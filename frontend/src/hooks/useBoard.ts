@@ -3,6 +3,7 @@ import {
   createCard,
   getCards,
   moveCard as moveCardApi,
+  sortCardsByPriority,
   updateCard as updateCardApi,
 } from '../api/cards';
 import { ApiError } from '../api/client';
@@ -28,10 +29,13 @@ export interface BoardState {
   updateCard: (id: number, input: CardUpdateInput) => Promise<void>;
   /** カードを移動・並べ替える（フロントエンド設計書 5.5）。失敗したときは元に戻して ApiError を投げる */
   moveCard: (id: number, to: CardMoveInput) => Promise<void>;
+  /** すべてのリストを優先度順に並べ直す（フロントエンド設計書 5.6）。失敗したときは ApiError を投げる */
+  sortByPriority: () => Promise<void>;
 }
 
 /**
- * ボードの表示に必要なリストとカードを取得して保持し、カードの登録・編集・移動も受け持つ（フロントエンド設計書 5.）。
+ * ボードの表示に必要なリストとカードを取得して保持し、カードの登録・編集・移動・全リストの並べ替えも受け持つ
+ * （フロントエンド設計書 5.）。
  * 描画時に 1 回だけ、/api/lists と /api/cards を同時に要求する。
  */
 export function useBoard(): BoardState {
@@ -132,5 +136,14 @@ export function useBoard(): BoardState {
     [reloadList],
   );
 
-  return { lists, cards, loading, error, addCard, updateCard, moveCard };
+  /**
+   * 全リストの優先度順並べ替え。楽観更新はせず、成功後に全件を取り直す（方針 8、5.6）。
+   * 3 リストすべての displayOrder が変わりうるので、リスト単位ではなく全件を置き換える。
+   */
+  const sortByPriority = useCallback(async (): Promise<void> => {
+    await sortCardsByPriority();
+    setCards(await getCards());
+  }, []);
+
+  return { lists, cards, loading, error, addCard, updateCard, moveCard, sortByPriority };
 }

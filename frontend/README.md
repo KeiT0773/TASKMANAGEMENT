@@ -80,13 +80,14 @@ frontend/
     ├── App.tsx                 画面全体（AppHeader + Board）
     ├── index.css               グローバルスタイル（* と body のみ）
     ├── types/board.ts          API の要求・応答に対応する型（Priority, ListId, BoardList, Card, CardCreateInput, CardUpdateInput, CardMoveInput）
-    ├── api/                    client.ts（apiGet, apiPost, apiPut, ApiError）、lists.ts、cards.ts
-    ├── hooks/useBoard.ts       リストとカードの取得・保持と、カードの登録（addCard）・編集（updateCard）・移動（moveCard。+ テスト）
+    ├── api/                    client.ts（apiGet, apiPost, apiPut, ApiError + テスト）、lists.ts、cards.ts
+    ├── hooks/useBoard.ts       リストとカードの取得・保持と、カードの登録（addCard）・編集（updateCard）・移動（moveCard）・全リストの並べ替え（sortByPriority）（+ テスト）
     ├── utils/                  date.ts（日付の書式変換と期限超過の判定 + テスト）、errorMessage.ts（エラー文言）、board.ts（ドロップ結果の反映 + テスト）
     ├── constants/priority.ts   優先度の表示名と並び順
     ├── components/
     │   ├── AppHeader/          ヘッダー
     │   ├── Board/              ボード（3 列の親。読み込み中・エラーの表示。+ テスト）
+    │   ├── BoardToolbar/       ヘッダー直下のツールバー（「優先度順に並べ替え」ボタン。+ テスト）
     │   ├── BoardList/          1 つのリスト（列）
     │   ├── Card/               1 枚のカード（+ テスト）
     │   ├── AddCardForm/        「＋ カードを追加」ボタンと入力フォーム（+ テスト）
@@ -107,4 +108,5 @@ frontend/
 - 編集に失敗したとき（サーバー停止など）は、その項目の下に文言を出し、入力内容は残す。
 - ドラッグ&ドロップによる移動（FR-04）と並べ替え（FR-05）を実装済み（`@hello-pangea/dnd`）。カードをつかんで別の列や同じ列の別の位置へ動かすと、ドロップした位置にそのまま置かれ（優先度順には並べ直さない）、`PUT /api/cards/{id}/position` で保存されて移動元・移動先の列を取り直す。完了列へ動かすと「（期限切れ）」の強調が消える。
 - 移動に失敗したときは元の位置に戻し、ボードの上部に文言を出す（「閉じる」で消える）。
+- 全リストの優先度順並べ替え（FR-10）を実装済み。ヘッダー直下のツールバーにある「優先度順に並べ替え」を押すと `POST /api/cards/sort` を呼び、3 つの列すべてがそれぞれの中で高 → 中 → 低に並び直る（同じ優先度の中の順序は変わらない）。押している間はボタンが無効になり「並べ替え中…」と表示される。失敗したときはボード上部に文言が出る。
 - 削除は未実装。

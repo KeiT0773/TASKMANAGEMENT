@@ -34,3 +34,11 @@ export function updateCard(id: number, input: CardUpdateInput): Promise<Card> {
 export function moveCard(id: number, input: CardMoveInput): Promise<Card> {
   return apiPut<CardMoveInput, Card>(`/api/cards/${id}/position`, input);
 }
+
+/**
+ * POST /api/cards/sort — すべてのリストのカードを優先度順に並べ直す（API 設計書 11.）。
+ * 応答は 204 で本文が無い。呼び出し側は getCards() で全件を取り直すこと。
+ */
+export function sortCardsByPriority(): Promise<void> {
+  return apiPost<undefined, void>('/api/cards/sort', undefined);
+}
