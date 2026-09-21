@@ -59,6 +59,7 @@ taskkill //PID <PID> //F                        # そのプロセスを停止（
 | `PUT http://localhost:8080/api/cards/1`（下記 curl 例） | `200` と編集後のカードの JSON | タイトル・説明文・期限・優先度の編集。優先度を変えたときだけ並べ替え |
 | `PUT http://localhost:8080/api/cards/1/position`（下記 curl 例） | `200` と移動後のカードの JSON | 別のリストへの移動と、同じリスト内の並べ替え。両リストの `displayOrder` を振り直す |
 | `POST http://localhost:8080/api/cards/sort`（下記 curl 例） | `204 No Content` | すべてのリストを優先度順（高 → 中 → 低）に並べ直す。同じ優先度の中の順序は保つ |
+| `DELETE http://localhost:8080/api/cards/1`（下記 curl 例） | `204 No Content`（存在しない id は 404） | カードの物理削除と、残ったカードの `displayOrder` の詰め直し |
 
 `/api/health/db` がエラー（HTTP 500）になる場合は、DB が起動していないか、接続設定が `compose.yaml` と食い違っている。
 
@@ -108,7 +109,8 @@ backend/
   - `V1__create_list_and_card_tables.sql` — テーブル定義、制約、索引
   - `V2__insert_initial_lists.sql` — リストの初期データ
 - `V3__insert_sample_cards.sql` で画面モックと同じサンプルカード 6 件を投入する（開発用。データ設計書 7.）。
-- カード・リストの取得 API（`GET /api/lists`、`GET /api/cards`、`GET /api/cards/{id}`）、カードの登録 API（`POST /api/cards`）、編集 API（`PUT /api/cards/{id}`）、移動・並べ替え API（`PUT /api/cards/{id}/position`）、全リストの優先度順並べ替え API（`POST /api/cards/sort`）を実装済み。仕様は [API 設計書](../docs/api-design.md) を参照。登録時と、編集で優先度を変えたときは、そのリスト内が優先度順（高 → 中 → 低）に並べ直される。移動・並べ替えでは並べ直さず、指定した位置にそのまま置く。全リストの並べ替えは 3 リストを 1 トランザクションで並べ直す。削除は未実装。
+- カード・リストの取得 API（`GET /api/lists`、`GET /api/cards`、`GET /api/cards/{id}`）、カードの登録 API（`POST /api/cards`）、編集 API（`PUT /api/cards/{id}`）、移動・並べ替え API（`PUT /api/cards/{id}/position`）、全リストの優先度順並べ替え API（`POST /api/cards/sort`）を実装済み。仕様は [API 設計書](../docs/api-design.md) を参照。登録時と、編集で優先度を変えたときは、そのリスト内が優先度順（高 → 中 → 低）に並べ直される。移動・並べ替えでは並べ直さず、指定した位置にそのまま置く。全リストの並べ替えは 3 リストを 1 トランザクションで並べ直す。
+- カードの削除 API（`DELETE /api/cards/{id}`）を実装済み。物理削除し、そのリストに残ったカードの `displayOrder` を 0 から詰める（優先度順には並べ直さない）。これで FR-01〜FR-10 に必要な API（8 本）がすべて揃った。
 
 テーブルが作られたことは、次のコマンド（Git Bash）で確認できる。
 
@@ -150,4 +152,8 @@ curl http://localhost:8080/api/cards
 # 全リストの優先度順並べ替え（本文なし、204）。何回呼んでも結果は同じ
 curl -i -X POST http://localhost:8080/api/cards/sort
 curl http://localhost:8080/api/cards
+
+# 削除（本文なし、204。2 回目は 404）。残ったカードの displayOrder が 0 から詰められている
+curl -i -X DELETE http://localhost:8080/api/cards/1
+curl "http://localhost:8080/api/cards?listId=todo"
 ```

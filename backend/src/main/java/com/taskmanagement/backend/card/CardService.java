@@ -15,7 +15,7 @@ import com.taskmanagement.backend.list.BoardListRepository;
 
 /**
  * カードに関する業務処理。
- * 登録・移動・並べ替え（表示順の振り直しを 1 つのトランザクションで行う処理）はここに置く。
+ * 登録・移動・並べ替え・削除（表示順の振り直しを 1 つのトランザクションで行う処理）はここに置く。
  * Controller は HTTP の変換だけを担当し、Repository は SQL の実行だけを担当する。
  */
 @Service
@@ -154,6 +154,22 @@ public class CardService {
 			List<Card> cards = cardRepository.findByListIdOrderByDisplayOrderAsc(list.getId());
 			resortByPriority(cards, now);
 		}
+	}
+
+	/**
+	 * カードを削除し、そのリストに残ったカードの displayOrder を 0 から詰める（API 設計書 12.「処理」、FR-03）。
+	 * 物理削除であり、削除済みフラグは持たない（データ設計書 2. 方針 3）。
+	 * 優先度順の並べ替えは行わず、残ったカードの相対的な順序はそのまま。位置が変わったカードだけ updatedAt が更新される。
+	 * 削除と振り直しは 1 つのトランザクションで行う。
+	 */
+	@Transactional
+	public void delete(long id) {
+		Card card = findById(id);
+		cardRepository.delete(card);
+
+		// 削除後の並びを取り直して詰める。JPA は問い合わせの前に保留中の DELETE を流すため、消したカードは含まれない
+		List<Card> rest = cardRepository.findByListIdOrderByDisplayOrderAsc(card.getListId());
+		renumber(rest, now());
 	}
 
 	/** DB（timestamptz）の精度に合わせ、現在時刻をマイクロ秒に丸めて返す（API 設計書 2. 方針 5）。 */
