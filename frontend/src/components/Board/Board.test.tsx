@@ -228,6 +228,43 @@ describe('Board', () => {
     expect(screen.getByText('作業中')).toBeInTheDocument();
   });
 
+  it('カード詳細で「カードを削除」を押すと DELETE のあとにそのリストを取り直し、詳細が閉じる', async () => {
+    let deleted = false;
+    const fetchMock = vi.fn((path: string, init?: RequestInit) => {
+      if (path === '/api/lists') return Promise.resolve(jsonResponse(lists));
+      if (path === '/api/cards/1' && init?.method === 'DELETE') {
+        deleted = true;
+        return Promise.resolve(new Response(null, { status: 204 }));
+      }
+      // 削除後に todo を取り直すと空になる
+      if (path === '/api/cards?listId=todo')
+        return Promise.resolve(jsonResponse(deleted ? [] : [cards[0]]));
+      return Promise.resolve(jsonResponse(cards));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const user = userEvent.setup();
+    render(<Board />);
+    await user.click(await screen.findByRole('button', { name: /資料作成/ }));
+    const dialog = screen.getByRole('dialog', { name: 'カード詳細' });
+
+    await user.click(within(dialog).getByRole('button', { name: 'カードを削除' }));
+
+    // 詳細が閉じ、カードが消えて未着手が 0 件になる。他のリストは変わらない
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(screen.queryByText('資料作成')).not.toBeInTheDocument();
+    const todoColumn = screen.getByText('未着手').closest('section')!;
+    expect(within(todoColumn).getByText('0件')).toBeInTheDocument();
+    expect(screen.getByText('実装')).toBeInTheDocument();
+
+    // DELETE は body なし。そのあと todo だけを取り直している（全件の取り直しは起動時の 1 回だけ）
+    const deleteCall = fetchMock.mock.calls.find(([, init]) => init?.method === 'DELETE');
+    expect(deleteCall![0]).toBe('/api/cards/1');
+    expect(deleteCall![1]!.body).toBeUndefined();
+    expect(fetchMock.mock.calls.filter(([p]) => p === '/api/cards?listId=todo')).toHaveLength(1);
+    expect(fetchMock.mock.calls.filter(([p]) => p === '/api/cards')).toHaveLength(1);
+  });
+
   it('「優先度順に並べ替え」を押すと POST /api/cards/sort のあとに全件を取り直して表示する', async () => {
     // 並べ替え後の全件（サーバーが並べ直した結果。todo に low → high の順で 2 枚あった想定）
     const sorted: Card[] = [

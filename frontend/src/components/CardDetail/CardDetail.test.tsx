@@ -21,15 +21,17 @@ function makeCard(overrides: Partial<Card> = {}): Card {
 }
 
 type SaveFn = (input: CardUpdateInput) => Promise<void>;
+type DeleteFn = () => Promise<void>;
 
 function renderDetail(
   card = makeCard(),
   onSave = vi.fn<SaveFn>(() => Promise.resolve()),
   onClose = vi.fn(),
+  onDelete = vi.fn<DeleteFn>(() => Promise.resolve()),
 ) {
   const user = userEvent.setup();
-  render(<CardDetail card={card} onSave={onSave} onClose={onClose} />);
-  return { user, onSave, onClose };
+  render(<CardDetail card={card} onSave={onSave} onDelete={onDelete} onClose={onClose} />);
+  return { user, onSave, onClose, onDelete };
 }
 
 const titleBox = () => screen.getByRole('textbox', { name: 'タイトル' });
@@ -182,5 +184,47 @@ describe('CardDetail', () => {
     await user.click(descBox());
 
     expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('「カードを削除」を押すと確認なしに onDelete が呼ばれ、押している間は無効になる', async () => {
+    let resolveDelete!: () => void;
+    const onDelete = vi.fn<DeleteFn>(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveDelete = resolve;
+        }),
+    );
+    const { user, onSave, onClose } = renderDetail(makeCard(), undefined, undefined, onDelete);
+
+    const button = screen.getByRole('button', { name: 'カードを削除' });
+    await user.click(button);
+
+    expect(onDelete).toHaveBeenCalledTimes(1);
+    // 応答待ちの間は「削除中…」で無効（二重送信の防止）
+    expect(screen.getByRole('button', { name: '削除中…' })).toBeDisabled();
+    // 確認ダイアログは無く、保存や閉じる操作も起きない
+    expect(onSave).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+
+    resolveDelete();
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'カードを削除' })).not.toBeDisabled(),
+    );
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('削除に失敗するとフッターに文言を出し、モーダルは開いたまま', async () => {
+    const onDelete = vi.fn<DeleteFn>(() => Promise.reject(new ApiError(500, 'boom')));
+    const { user, onClose } = renderDetail(makeCard(), undefined, undefined, onDelete);
+
+    await user.click(screen.getByRole('button', { name: 'カードを削除' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      '削除できませんでした。サーバーでエラーが発生しました。',
+    );
+    expect(screen.getByRole('dialog', { name: 'カード詳細' })).toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
+    // もう一度押せる
+    expect(screen.getByRole('button', { name: 'カードを削除' })).not.toBeDisabled();
   });
 });

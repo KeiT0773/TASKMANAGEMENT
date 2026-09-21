@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiPut } from './client';
+import { apiDelete, apiGet, apiPost, apiPut } from './client';
 import type { Card, CardCreateInput, CardMoveInput, CardUpdateInput, ListId } from '../types/board';
 
 /**
@@ -41,4 +41,13 @@ export function moveCard(id: number, input: CardMoveInput): Promise<Card> {
  */
 export function sortCardsByPriority(): Promise<void> {
   return apiPost<undefined, void>('/api/cards/sort', undefined);
+}
+
+/**
+ * DELETE /api/cards/{id} — カードを削除する（API 設計書 12.）。
+ * 応答は 204 で本文が無く、サーバーがそのリストの displayOrder を詰めるため、
+ * 呼び出し側は要求前に控えた listId で getCards(listId) を取り直すこと。
+ */
+export function deleteCard(id: number): Promise<void> {
+  return apiDelete<void>(`/api/cards/${id}`);
 }

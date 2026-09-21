@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   createCard,
+  deleteCard as deleteCardApi,
   getCards,
   moveCard as moveCardApi,
   sortCardsByPriority,
@@ -31,10 +32,12 @@ export interface BoardState {
   moveCard: (id: number, to: CardMoveInput) => Promise<void>;
   /** すべてのリストを優先度順に並べ直す（フロントエンド設計書 5.6）。失敗したときは ApiError を投げる */
   sortByPriority: () => Promise<void>;
+  /** カードを削除する（フロントエンド設計書 5.7）。失敗したときは ApiError を投げる */
+  deleteCard: (id: number) => Promise<void>;
 }
 
 /**
- * ボードの表示に必要なリストとカードを取得して保持し、カードの登録・編集・移動・全リストの並べ替えも受け持つ
+ * ボードの表示に必要なリストとカードを取得して保持し、カードの登録・編集・移動・全リストの並べ替え・削除も受け持つ
  * （フロントエンド設計書 5.）。
  * 描画時に 1 回だけ、/api/lists と /api/cards を同時に要求する。
  */
@@ -43,7 +46,7 @@ export function useBoard(): BoardState {
   const [cards, setCards] = useState<Card[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ApiError | null>(null);
-  // 非同期処理の途中で最新の cards を参照するための ref（moveCard で移動元のリストを引く）
+  // 非同期処理の途中で最新の cards を参照するための ref（moveCard で移動元、deleteCard で所属のリストを引く）
   const cardsRef = useRef<Card[]>(cards);
   useEffect(() => {
     cardsRef.current = cards;
@@ -145,5 +148,33 @@ export function useBoard(): BoardState {
     setCards(await getCards());
   }, []);
 
-  return { lists, cards, loading, error, addCard, updateCard, moveCard, sortByPriority };
+  /**
+   * 削除。応答に本文が無いので、要求の前に cards から listId を控えておき、成功後にそのリストを取り直す
+   * （サーバーが残ったカードの displayOrder を詰めるため。方針 8、5.7）。楽観更新はしない。
+   * 万一 listId が引けなければ全件を取り直す。失敗したときは cards を変えずに ApiError を投げる。
+   */
+  const deleteCard = useCallback(
+    async (id: number): Promise<void> => {
+      const listId: ListId | null = cardsRef.current.find((c) => c.id === id)?.listId ?? null;
+      await deleteCardApi(id);
+      if (listId !== null) {
+        await reloadList(listId);
+      } else {
+        setCards(await getCards());
+      }
+    },
+    [reloadList],
+  );
+
+  return {
+    lists,
+    cards,
+    loading,
+    error,
+    addCard,
+    updateCard,
+    moveCard,
+    sortByPriority,
+    deleteCard,
+  };
 }

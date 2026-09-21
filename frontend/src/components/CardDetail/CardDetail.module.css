@@ -1,5 +1,5 @@
 /* 画面モック mock/style.css の .modal-overlay / .modal / .modal-header / .btn-close / .modal-body /
-   .field / .field-label / .field-row / .priority-options。フッター（削除ボタン）は削除の実装時に追加する */
+   .field / .field-label / .field-row / .priority-options / .modal-footer / .btn-delete */
 
 .overlay {
   position: fixed;
@@ -108,4 +108,32 @@
   margin: 0;
   color: #de350b;
   font-size: 12px;
+}
+
+.footer {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px 16px;
+  border-top: 1px solid #dfe1e6;
+}
+
+.delete {
+  padding: 8px 14px;
+  border: 1px solid #de350b;
+  border-radius: 4px;
+  background: #fff;
+  color: #de350b;
+  cursor: pointer;
+}
+
+.delete:hover:not(:disabled) {
+  background: #de350b;
+  color: #fff;
+}
+
+.delete:disabled {
+  opacity: 0.6;
+  cursor: default;
 }

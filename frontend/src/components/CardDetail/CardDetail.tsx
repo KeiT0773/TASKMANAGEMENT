@@ -16,10 +16,13 @@ interface Props {
   card: Card;
   /** 項目が確定したときの保存先。useBoard の updateCard を渡す。失敗したときは ApiError を投げること */
   onSave: (input: CardUpdateInput) => Promise<void>;
+  /** 「カードを削除」を押したときの削除先。Board 経由で useBoard の deleteCard を呼ぶ。失敗したときは ApiError を投げること */
+  onDelete: () => Promise<void>;
   onClose: () => void;
 }
 
-type Field = 'title' | 'description' | 'dueDate' | 'priority';
+/** 失敗の文言を出す場所。4 項目のいずれか、またはフッターの削除ボタン */
+type Field = 'title' | 'description' | 'dueDate' | 'priority' | 'delete';
 
 /** 入力欄の値（下書き）。入力欄は文字列しか持てないので、null は '' で表す */
 interface Draft {
@@ -60,11 +63,13 @@ function isSameAsCard(input: CardUpdateInput, card: Card): boolean {
 /**
  * カード詳細（SC-02）。ボードの手前に重ねるモーダルで、タイトル・説明文・期限・優先度を編集する
  * （フロントエンド設計書 8.6）。「保存」ボタンは無く、項目ごとに確定したときに onSave を呼ぶ。
+ * フッターの「カードを削除」は確認を求めずに onDelete を呼ぶ（要件定義書 決定事項 No.4）。
  * Board は key={card.id} で描画し、別のカードを開いたときは作り直される。
  */
-export function CardDetail({ card, onSave, onClose }: Props) {
+export function CardDetail({ card, onSave, onDelete, onClose }: Props) {
   const [draft, setDraft] = useState<Draft>(() => draftOf(card));
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<{ field: Field; error: ApiError } | null>(null);
   const titleRef = useRef<HTMLInputElement>(null);
   // 保存を直列にする。前の保存が終わる前に次の項目が確定しても、順番に送られるようにする
@@ -123,6 +128,25 @@ export function CardDetail({ card, onSave, onClose }: Props) {
     });
   }
 
+  /**
+   * 削除。保存の直列化（queueRef）とは独立に送る。成功すればカードごと無くなり Board が閉じるので、
+   * 途中の保存の結果を待つ意味が無いため。失敗したらフッターに文言を出し、モーダルは開いたまま。
+   */
+  async function handleDelete() {
+    setDeleting(true);
+    try {
+      await onDelete();
+      setError(null);
+    } catch (err: unknown) {
+      setError({
+        field: 'delete',
+        error: err instanceof ApiError ? err : new ApiError(null, String(err)),
+      });
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   function handleTitleKeyDown(e: ReactKeyboardEvent<HTMLInputElement>) {
     if (e.key === 'Enter') {
       e.preventDefault();
@@ -135,10 +159,14 @@ export function CardDetail({ card, onSave, onClose }: Props) {
     if (e.target === e.currentTarget) onClose();
   }
 
-  function fieldError(field: Field) {
+  /**
+   * @param prefix 文言の先頭に付ける操作名（削除の失敗は入力欄が無いので「削除できませんでした。」を付ける）
+   */
+  function fieldError(field: Field, prefix = '') {
     if (error === null || error.field !== field) return null;
     return (
       <p className={styles.error} role="alert">
+        {prefix}
         {errorMessage(error.error)}
       </p>
     );
@@ -240,6 +268,19 @@ export function CardDetail({ card, onSave, onClose }: Props) {
               {fieldError('priority')}
             </fieldset>
           </div>
+        </div>
+
+        {/* 削除ボタンは誤操作を防ぐため、右上の「閉じる」から離れた最下部に置く（画面要件書 5.2） */}
+        <div className={styles.footer}>
+          {fieldError('delete', '削除できませんでした。')}
+          <button
+            type="button"
+            className={styles.delete}
+            disabled={deleting}
+            onClick={() => void handleDelete()}
+          >
+            {deleting ? '削除中…' : 'カードを削除'}
+          </button>
         </div>
       </div>
     </div>

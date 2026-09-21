@@ -13,11 +13,20 @@ import styles from './Board.module.css';
  * ボード。リストとカードを取得し、状態に応じて読み込み中・エラー・3 列のいずれかを描画する（SC-01）。
  * 3 列を DragDropContext で包み、ドロップ時に移動を保存する（FR-04、FR-05）。
  * 上部にツールバー（全リストの優先度順並べ替え、FR-10）を置き、
- * 選択中のカードがあれば、その手前にカード詳細（SC-02）を重ねる。
+ * 選択中のカードがあれば、その手前にカード詳細（SC-02）を重ねる。カード詳細からの削除（FR-03）もここで受ける。
  */
 export function Board() {
-  const { lists, cards, loading, error, addCard, updateCard, moveCard, sortByPriority } =
-    useBoard();
+  const {
+    lists,
+    cards,
+    loading,
+    error,
+    addCard,
+    updateCard,
+    moveCard,
+    sortByPriority,
+    deleteCard,
+  } = useBoard();
   const [selectedCardId, setSelectedCardId] = useState<number | null>(null);
   // 移動・一括並べ替えに失敗したときの文言（方針 7）。入力欄が無い操作なので、ボードの上部に出す。
   // action は「移動」「並べ替え」のように、どの操作が失敗したかを示す
@@ -62,7 +71,7 @@ export function Board() {
     );
   }
 
-  // 選択中のカードは cards から探す。無くなっていれば（将来の削除）詳細は描画しない
+  // 選択中のカードは cards から探す。無くなっていれば（削除後）詳細は描画しない
   const selectedCard = cards.find((c) => c.id === selectedCardId) ?? null;
 
   return (
@@ -97,6 +106,11 @@ export function Board() {
           key={selectedCard.id}
           card={selectedCard}
           onSave={(input) => updateCard(selectedCard.id, input)}
+          onDelete={async () => {
+            await deleteCard(selectedCard.id);
+            // cards から消えるので描画されなくなるが、古い id を持ち続けないよう明示的に閉じる
+            closeDetail();
+          }}
           onClose={closeDetail}
         />
       )}
