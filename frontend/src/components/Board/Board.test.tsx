@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { BoardList, Card } from '../../types/board';
@@ -226,5 +226,81 @@ describe('Board', () => {
     await user.click(within(dialog).getByRole('button', { name: '閉じる' }));
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(screen.getByText('作業中')).toBeInTheDocument();
+  });
+
+  it('「優先度順に並べ替え」を押すと POST /api/cards/sort のあとに全件を取り直して表示する', async () => {
+    // 並べ替え後の全件（サーバーが並べ直した結果。todo に low → high の順で 2 枚あった想定）
+    const sorted: Card[] = [
+      { ...cards[0]!, id: 11, title: '高いタスク', priority: 'high', displayOrder: 0 },
+      { ...cards[0]!, id: 10, title: '低いタスク', priority: 'low', displayOrder: 1 },
+      cards[1]!,
+    ];
+    const before: Card[] = [sorted[1]!, sorted[0]!, cards[1]!];
+
+    let sortCalled = false;
+    const fetchMock = vi.fn((path: string, init?: RequestInit) => {
+      if (path === '/api/lists') return Promise.resolve(jsonResponse(lists));
+      if (path === '/api/cards/sort' && init?.method === 'POST') {
+        sortCalled = true;
+        return Promise.resolve(new Response(null, { status: 204 }));
+      }
+      // 並べ替え前は before、並べ替え後は sorted を返す
+      return Promise.resolve(jsonResponse(sortCalled ? sorted : before));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const user = userEvent.setup();
+    render(<Board />);
+    const todoColumn = (await screen.findByText('未着手')).closest('section')!;
+    // 押す前は 低 → 高 の順
+    const titlesBefore = within(todoColumn)
+      .getAllByRole('button', { name: /タスク/ })
+      .map((el) => el.textContent);
+    expect(titlesBefore[0]).toContain('低いタスク');
+
+    await user.click(screen.getByRole('button', { name: '優先度順に並べ替え' }));
+
+    await waitFor(() => {
+      const titles = within(todoColumn)
+        .getAllByRole('button', { name: /タスク/ })
+        .map((el) => el.textContent);
+      expect(titles[0]).toContain('高いタスク');
+      expect(titles[1]).toContain('低いタスク');
+    });
+    // POST は body なし、その後に全件（?listId= 無し）を取り直している
+    const sortCall = fetchMock.mock.calls.find(([p]) => p === '/api/cards/sort');
+    expect(sortCall![1]!.body).toBeUndefined();
+    expect(fetchMock.mock.calls.filter(([p]) => p === '/api/cards')).toHaveLength(2);
+  });
+
+  it('並べ替えに失敗するとボード上部に文言を出し、ボードは表示したまま', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((path: string, init?: RequestInit) => {
+        if (path === '/api/lists') return Promise.resolve(jsonResponse(lists));
+        if (init?.method === 'POST') {
+          return Promise.resolve(
+            jsonResponse({ title: 'Internal Server Error', status: 500, detail: 'boom' }, 500),
+          );
+        }
+        return Promise.resolve(jsonResponse(cards));
+      }),
+    );
+
+    const user = userEvent.setup();
+    render(<Board />);
+    await screen.findByText('未着手');
+
+    await user.click(screen.getByRole('button', { name: '優先度順に並べ替え' }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(
+      '並べ替えを保存できませんでした。サーバーでエラーが発生しました。',
+    );
+    expect(screen.getByText('資料作成')).toBeInTheDocument();
+
+    // 「閉じる」で消える
+    await user.click(within(alert).getByRole('button', { name: '閉じる' }));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 });

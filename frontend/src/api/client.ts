@@ -35,6 +35,7 @@ export function apiGet<T>(path: string): Promise<T> {
 /**
  * POST 要求を送り、応答の JSON を T として返す。
  * body は JSON に変換して送る。201 Created も 2xx なので成功として扱う。
+ * body が undefined のときは本文なしで送る（POST /api/cards/sort のような操作の API）。
  */
 export function apiPost<TBody, T>(path: string, body: TBody): Promise<T> {
   return requestJson<T>('POST', path, body);
@@ -45,8 +46,11 @@ export function apiPut<TBody, T>(path: string, body: TBody): Promise<T> {
   return requestJson<T>('PUT', path, body);
 }
 
-/** JSON の body を伴う要求（POST / PUT）の共通部分 */
+/** JSON の body を伴う（または本文なしの）要求（POST / PUT）の共通部分 */
 function requestJson<T>(method: 'POST' | 'PUT', path: string, body: unknown): Promise<T> {
+  if (body === undefined) {
+    return request<T>(path, { method });
+  }
   return request<T>(path, {
     method,
     headers: { 'Content-Type': 'application/json' },
@@ -66,6 +70,11 @@ async function request<T>(path: string, init: RequestInit): Promise<T> {
 
   if (!res.ok) {
     throw new ApiError(res.status, await readErrorMessage(res));
+  }
+
+  // 204 No Content は本文が無いので読まない（フロントエンド設計書 6.1）
+  if (res.status === 204) {
+    return undefined as T;
   }
 
   return (await res.json()) as T;

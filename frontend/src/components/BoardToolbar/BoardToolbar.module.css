@@ -1,0 +1,28 @@
+/* 画面モック mock/style.css の .toolbar / .btn-sort */
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px 0; /* 左端をボードの列（padding 20px）とそろえる */
+}
+
+.sort {
+  padding: 6px 14px;
+  border: 1px solid #0052cc;
+  border-radius: 4px;
+  background: #fff;
+  color: #0052cc;
+  font-size: 13px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.sort:hover:not(:disabled) {
+  background: #deebff;
+}
+
+.sort:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
