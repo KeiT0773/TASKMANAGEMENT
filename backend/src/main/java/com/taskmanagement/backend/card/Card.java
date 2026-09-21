@@ -88,6 +88,15 @@ public class Card {
 	}
 
 	/**
+	 * 別のリストへ移す（API 設計書 10.）。表示順は呼び出し側が assignDisplayOrder で振り直す。
+	 * 同じリスト内の並べ替えではこのメソッドは呼ばない（listId が変わらないため）。
+	 */
+	public void moveTo(String listId, OffsetDateTime now) {
+		this.listId = listId;
+		this.updatedAt = now;
+	}
+
+	/**
 	 * 並べ替えの結果として表示順を割り当てる（データ設計書 6.）。
 	 * 値が変わるときだけ updatedAt も更新する。変わらないカードまで更新すると、
 	 * 「並べ替えで動いていないのに更新日時だけ進む」ことになるため。

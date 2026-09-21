@@ -432,4 +432,133 @@ class CardControllerTest {
 				.extractingPath("$.detail").asString().contains("999999");
 	}
 
+	// ---------- 移動・並べ替え（PUT /api/cards/{id}/position、API 設計書 10.） ----------
+
+	private static String moveBody(String listId, Integer displayOrder) {
+		return "{\"listId\":" + jsonString(listId) + ",\"displayOrder\":" + displayOrder + "}";
+	}
+
+	/** listId のカード一覧を取得し、id の並びを返す。あわせて displayOrder が 0 からの連番であることを検証する。 */
+	private List<Long> idsInOrder(String listId) {
+		String body = new String(mvc.get().uri("/api/cards").param("listId", listId).exchange()
+				.getResponse().getContentAsByteArray(), StandardCharsets.UTF_8);
+		List<Integer> orders = JsonPath.read(body, "$[*].displayOrder");
+		for (int i = 0; i < orders.size(); i++) {
+			assertThat(orders.get(i)).as("displayOrder は 0 からの連番").isEqualTo(i);
+		}
+		List<Number> ids = JsonPath.read(body, "$[*].id");
+		return ids.stream().map(Number::longValue).toList();
+	}
+
+	@Test
+	void 同じリスト内で並べ替えると指定した位置に入り連番が維持される() {
+		// low で登録すると done の末尾に A, B, C の順で並ぶ
+		long a = createCard("並替A", "low", "done");
+		long b = createCard("並替B", "low", "done");
+		long c = createCard("並替C", "low", "done");
+		List<Long> before = idsInOrder("done");
+		int idxA = before.indexOf(a);
+		assertThat(before.subList(idxA, idxA + 3)).containsExactly(a, b, c);
+
+		// C を A の位置へ
+		assertThat(mvc.put().uri("/api/cards/" + c + "/position").contentType(JSON)
+				.content(moveBody("done", idxA)))
+				.hasStatusOk()
+				.bodyJson()
+				.satisfies(json -> {
+					assertThat(json).extractingPath("$.listId").isEqualTo("done");
+					assertThat(json).extractingPath("$.displayOrder").isEqualTo(idxA);
+				});
+
+		List<Long> after = idsInOrder("done");
+		assertThat(after.subList(idxA, idxA + 3)).containsExactly(c, a, b);
+		assertThat(after).hasSameSizeAs(before);
+	}
+
+	@Test
+	void 別のリストへ移動すると両リストが振り直される() {
+		long x = createCard("移動X", "low", "todo");
+		int todoBefore = idsInOrder("todo").size();
+		int doingBefore = idsInOrder("doing").size();
+
+		assertThat(mvc.put().uri("/api/cards/" + x + "/position").contentType(JSON)
+				.content(moveBody("doing", 0)))
+				.hasStatusOk()
+				.bodyJson()
+				.satisfies(json -> {
+					assertThat(json).extractingPath("$.listId").isEqualTo("doing");
+					assertThat(json).extractingPath("$.displayOrder").isEqualTo(0);
+					String createdAt = JsonPath.read(json.getJson(), "$.createdAt");
+					String updatedAt = JsonPath.read(json.getJson(), "$.updatedAt");
+					assertThat(updatedAt).isGreaterThanOrEqualTo(createdAt);
+				});
+
+		List<Long> todoAfter = idsInOrder("todo");
+		List<Long> doingAfter = idsInOrder("doing");
+		assertThat(todoAfter).hasSize(todoBefore - 1).doesNotContain(x);
+		assertThat(doingAfter).hasSize(doingBefore + 1);
+		assertThat(doingAfter.get(0)).isEqualTo(x);
+	}
+
+	@Test
+	void displayOrderが枚数以上なら末尾に置く() {
+		long y = createCard("末尾Y", "high", "todo");
+
+		assertThat(mvc.put().uri("/api/cards/" + y + "/position").contentType(JSON)
+				.content(moveBody("done", 9999)))
+				.hasStatusOk();
+
+		List<Long> done = idsInOrder("done");
+		assertThat(done.get(done.size() - 1)).isEqualTo(y);
+	}
+
+	@Test
+	void 移動では優先度順に並べ直さない() {
+		// todo の先頭は初期データの high。low のカードを先頭に置いてもそのまま先頭に残る
+		long l = createCard("先頭へ", "low", "todo");
+
+		assertThat(mvc.put().uri("/api/cards/" + l + "/position").contentType(JSON)
+				.content(moveBody("todo", 0)))
+				.hasStatusOk()
+				.bodyJson()
+				.extractingPath("$.displayOrder").isEqualTo(0);
+
+		assertThat(idsInOrder("todo").get(0)).isEqualTo(l);
+		assertThat(mvc.get().uri("/api/cards").param("listId", "todo"))
+				.bodyJson()
+				.extractingPath("$[0].priority").isEqualTo("low");
+	}
+
+	@Test
+	void 移動でdisplayOrderが負なら400を返す() {
+		long id = createCard("負の位置", "medium", "todo");
+		assertThat(mvc.put().uri("/api/cards/" + id + "/position").contentType(JSON)
+				.content(moveBody("todo", -1)))
+				.hasStatus(HttpStatus.BAD_REQUEST)
+				.bodyJson()
+				.satisfies(json -> {
+					assertThat(json).extractingPath("$.detail").isEqualTo("表示順は0以上で指定してください");
+					assertThat(json).extractingPath("$.errors[0].field").isEqualTo("displayOrder");
+				});
+	}
+
+	@Test
+	void 移動先のlistIdが存在しなければ400を返す() {
+		long id = createCard("行き先なし", "medium", "todo");
+		assertThat(mvc.put().uri("/api/cards/" + id + "/position").contentType(JSON)
+				.content(moveBody("xxx", 0)))
+				.hasStatus(HttpStatus.BAD_REQUEST)
+				.bodyJson()
+				.extractingPath("$.detail").isEqualTo("リストが見つかりません: listId=xxx");
+	}
+
+	@Test
+	void 存在しないカードを移動すると404を返す() {
+		assertThat(mvc.put().uri("/api/cards/999999/position").contentType(JSON)
+				.content(moveBody("todo", 0)))
+				.hasStatus(HttpStatus.NOT_FOUND)
+				.bodyJson()
+				.extractingPath("$.detail").asString().contains("999999");
+	}
+
 }
