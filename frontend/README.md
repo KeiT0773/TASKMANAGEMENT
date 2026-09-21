@@ -79,10 +79,10 @@ frontend/
     ├── main.tsx                React の起動（App を DOM に描画）
     ├── App.tsx                 画面全体（AppHeader + Board）
     ├── index.css               グローバルスタイル（* と body のみ）
-    ├── types/board.ts          API の要求・応答に対応する型（Priority, ListId, BoardList, Card, CardCreateInput, CardUpdateInput）
+    ├── types/board.ts          API の要求・応答に対応する型（Priority, ListId, BoardList, Card, CardCreateInput, CardUpdateInput, CardMoveInput）
     ├── api/                    client.ts（apiGet, apiPost, apiPut, ApiError）、lists.ts、cards.ts
-    ├── hooks/useBoard.ts       リストとカードの取得・保持と、カードの登録（addCard）・編集（updateCard）
-    ├── utils/                  date.ts（日付の書式変換と期限超過の判定 + テスト）、errorMessage.ts（エラー文言）
+    ├── hooks/useBoard.ts       リストとカードの取得・保持と、カードの登録（addCard）・編集（updateCard）・移動（moveCard。+ テスト）
+    ├── utils/                  date.ts（日付の書式変換と期限超過の判定 + テスト）、errorMessage.ts（エラー文言）、board.ts（ドロップ結果の反映 + テスト）
     ├── constants/priority.ts   優先度の表示名と並び順
     ├── components/
     │   ├── AppHeader/          ヘッダー
@@ -105,4 +105,6 @@ frontend/
 - 登録に失敗したとき（入力エラー、サーバー停止など）は、ボードは表示したまま入力欄の下に文言を出し、入力内容は残す。
 - カード詳細（SC-02）と編集（FR-02, FR-06, FR-07, FR-08）を実装済み。カードをクリック（または Enter）すると詳細がボードの手前に開く。「保存」ボタンは無く、タイトル・説明文はフォーカスを外したとき（タイトルは Enter でも）、期限・優先度は値を変えたときに `PUT /api/cards/{id}` で保存し、その列を取り直す。優先度を変えると列内の位置が変わる。空白だけのタイトルは保存せず元に戻る。閉じるのは「閉じる」ボタン・背景クリック・Escape。
 - 編集に失敗したとき（サーバー停止など）は、その項目の下に文言を出し、入力内容は残す。
-- ドラッグ&ドロップによる移動・並べ替え、削除は未実装。
+- ドラッグ&ドロップによる移動（FR-04）と並べ替え（FR-05）を実装済み（`@hello-pangea/dnd`）。カードをつかんで別の列や同じ列の別の位置へ動かすと、ドロップした位置にそのまま置かれ（優先度順には並べ直さない）、`PUT /api/cards/{id}/position` で保存されて移動元・移動先の列を取り直す。完了列へ動かすと「（期限切れ）」の強調が消える。
+- 移動に失敗したときは元の位置に戻し、ボードの上部に文言を出す（「閉じる」で消える）。
+- 削除は未実装。

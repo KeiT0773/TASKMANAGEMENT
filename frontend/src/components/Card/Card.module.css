@@ -1,4 +1,4 @@
-/* 画面モック mock/style.css の .card / .card-title-row / .card-title / .card-due */
+/* 画面モック mock/style.css の .card / .card-title-row / .card-title / .card-due / .card.dragging */
 
 .card {
   background: #fff;
@@ -6,12 +6,17 @@
   padding: 10px 12px;
   margin-bottom: 8px;
   box-shadow: 0 1px 2px rgba(9, 30, 66, 0.25);
-  /* クリックで詳細が開くことを示す。ドラッグ&ドロップの実装時に grab へ変える */
-  cursor: pointer;
+  cursor: grab; /* つかんで動かせることを示す（モックと同じ） */
 }
 
 .card:hover {
   background: #f9fafc;
+}
+
+/* ドラッグ中のカード（元の位置に薄く残る方ではなく、マウスに追従している方） */
+.dragging {
+  opacity: 0.9;
+  box-shadow: 0 8px 16px rgba(9, 30, 66, 0.3);
 }
 
 .titleRow {

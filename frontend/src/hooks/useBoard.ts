@@ -1,8 +1,21 @@
-import { useCallback, useEffect, useState } from 'react';
-import { createCard, getCards, updateCard as updateCardApi } from '../api/cards';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  createCard,
+  getCards,
+  moveCard as moveCardApi,
+  updateCard as updateCardApi,
+} from '../api/cards';
 import { ApiError } from '../api/client';
 import { getLists } from '../api/lists';
-import type { BoardList, Card, CardCreateInput, CardUpdateInput, ListId } from '../types/board';
+import type {
+  BoardList,
+  Card,
+  CardCreateInput,
+  CardMoveInput,
+  CardUpdateInput,
+  ListId,
+} from '../types/board';
+import { applyMove } from '../utils/board';
 
 export interface BoardState {
   lists: BoardList[];
@@ -13,10 +26,12 @@ export interface BoardState {
   addCard: (input: CardCreateInput) => Promise<void>;
   /** カードの 4 項目を編集する（フロントエンド設計書 5.4）。失敗したときは ApiError を投げる */
   updateCard: (id: number, input: CardUpdateInput) => Promise<void>;
+  /** カードを移動・並べ替える（フロントエンド設計書 5.5）。失敗したときは元に戻して ApiError を投げる */
+  moveCard: (id: number, to: CardMoveInput) => Promise<void>;
 }
 
 /**
- * ボードの表示に必要なリストとカードを取得して保持し、カードの登録・編集も受け持つ（フロントエンド設計書 5.）。
+ * ボードの表示に必要なリストとカードを取得して保持し、カードの登録・編集・移動も受け持つ（フロントエンド設計書 5.）。
  * 描画時に 1 回だけ、/api/lists と /api/cards を同時に要求する。
  */
 export function useBoard(): BoardState {
@@ -24,6 +39,11 @@ export function useBoard(): BoardState {
   const [cards, setCards] = useState<Card[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ApiError | null>(null);
+  // 非同期処理の途中で最新の cards を参照するための ref（moveCard で移動元のリストを引く）
+  const cardsRef = useRef<Card[]>(cards);
+  useEffect(() => {
+    cardsRef.current = cards;
+  }, [cards]);
 
   useEffect(() => {
     // コンポーネントが消えた後に応答が返っても状態を更新しないためのフラグ。
@@ -87,5 +107,30 @@ export function useBoard(): BoardState {
     [reloadList],
   );
 
-  return { lists, cards, loading, error, addCard, updateCard };
+  /**
+   * ドラッグ&ドロップの移動。ドロップした位置にカードが見えている必要があるため、API を呼ぶ前に
+   * 手元の cards を先に並べ替える（楽観更新。方針 9）。成功したら移動元・移動先を取り直し、
+   * 失敗したら全件を取り直してサーバーの状態（＝元の位置）に戻してから ApiError を投げる。
+   */
+  const moveCard = useCallback(
+    async (id: number, to: CardMoveInput): Promise<void> => {
+      const fromListId: ListId | null = cardsRef.current.find((c) => c.id === id)?.listId ?? null;
+      setCards((prev) => applyMove(prev, id, to.listId, to.displayOrder));
+
+      try {
+        await moveCardApi(id, to);
+      } catch (e: unknown) {
+        setCards(await getCards());
+        throw e;
+      }
+
+      await reloadList(to.listId);
+      if (fromListId !== null && fromListId !== to.listId) {
+        await reloadList(fromListId);
+      }
+    },
+    [reloadList],
+  );
+
+  return { lists, cards, loading, error, addCard, updateCard, moveCard };
 }

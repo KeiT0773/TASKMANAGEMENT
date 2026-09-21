@@ -1,4 +1,6 @@
+import { DragDropContext, Droppable } from '@hello-pangea/dnd';
 import { render, screen } from '@testing-library/react';
+import type { ReactNode } from 'react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import type { Card as CardData } from '../../types/board';
@@ -21,6 +23,22 @@ function makeCard(overrides: Partial<CardData> = {}): CardData {
   };
 }
 
+/** Card は Draggable なので、DragDropContext と Droppable の中でしか描画できない */
+function renderInBoard(ui: ReactNode) {
+  return render(
+    <DragDropContext onDragEnd={() => {}}>
+      <Droppable droppableId="todo">
+        {(provided) => (
+          <div ref={provided.innerRef} {...provided.droppableProps}>
+            {ui}
+            {provided.placeholder}
+          </div>
+        )}
+      </Droppable>
+    </DragDropContext>,
+  );
+}
+
 /** 今日から offsetDays 日後の 'YYYY-MM-DD' */
 function dateFromToday(offsetDays: number): string {
   const d = new Date();
@@ -30,24 +48,30 @@ function dateFromToday(offsetDays: number): string {
 
 describe('Card', () => {
   it('タイトルと優先度の表示名を表示する', () => {
-    render(<Card onClick={() => {}} card={makeCard({ title: '買い物', priority: 'high' })} />);
+    renderInBoard(
+      <Card index={0} onClick={() => {}} card={makeCard({ title: '買い物', priority: 'high' })} />,
+    );
     expect(screen.getByText('買い物')).toBeInTheDocument();
     expect(screen.getByText('高')).toBeInTheDocument();
   });
 
   it('期限があれば「期限 MM/DD」を表示する', () => {
-    render(<Card onClick={() => {}} card={makeCard({ dueDate: '2099-09-22' })} />);
+    renderInBoard(<Card index={0} onClick={() => {}} card={makeCard({ dueDate: '2099-09-22' })} />);
     expect(screen.getByText('期限 09/22')).toBeInTheDocument();
   });
 
   it('期限が無ければ期限の文言を表示しない', () => {
-    render(<Card onClick={() => {}} card={makeCard({ dueDate: null })} />);
+    renderInBoard(<Card index={0} onClick={() => {}} card={makeCard({ dueDate: null })} />);
     expect(screen.queryByText(/期限/)).not.toBeInTheDocument();
   });
 
   it('期限を過ぎていれば「（期限切れ）」を付けて強調する', () => {
-    render(
-      <Card onClick={() => {}} card={makeCard({ dueDate: dateFromToday(-1), listId: 'todo' })} />,
+    renderInBoard(
+      <Card
+        index={0}
+        onClick={() => {}}
+        card={makeCard({ dueDate: dateFromToday(-1), listId: 'todo' })}
+      />,
     );
     const due = screen.getByText(/期限切れ/);
     expect(due).toBeInTheDocument();
@@ -55,8 +79,12 @@ describe('Card', () => {
   });
 
   it('完了リストのカードは期限を過ぎていても「（期限切れ）」を付けない', () => {
-    render(
-      <Card onClick={() => {}} card={makeCard({ dueDate: dateFromToday(-1), listId: 'done' })} />,
+    renderInBoard(
+      <Card
+        index={0}
+        onClick={() => {}}
+        card={makeCard({ dueDate: dateFromToday(-1), listId: 'done' })}
+      />,
     );
     expect(screen.queryByText(/期限切れ/)).not.toBeInTheDocument();
   });
@@ -64,7 +92,7 @@ describe('Card', () => {
   it('クリックと Enter で onClick が呼ばれる', async () => {
     const user = userEvent.setup();
     const onClick = vi.fn();
-    render(<Card onClick={onClick} card={makeCard()} />);
+    renderInBoard(<Card index={0} onClick={onClick} card={makeCard()} />);
 
     const card = screen.getByRole('button', { name: /資料作成/ });
     await user.click(card);
