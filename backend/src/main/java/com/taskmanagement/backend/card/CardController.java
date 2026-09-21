@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 import jakarta.validation.Valid;
 
 /**
- * カードの API（API 設計書 6.〜9.）。
+ * カードの API（API 設計書 6.〜10.）。
  * HTTP の要求・応答の変換だけを担当し、処理は CardService に委ねる。
  */
 @RestController
@@ -66,6 +66,15 @@ public class CardController {
 	@PutMapping("/{id}")
 	public CardResponse update(@PathVariable("id") long id, @Valid @RequestBody CardUpdateRequest request) {
 		return CardResponse.from(cardService.update(id, request));
+	}
+
+	/**
+	 * PUT /api/cards/{id}/position — カードを別のリストへ移動する、または同じリスト内で並べ替える。
+	 * 200 と移動後のカードを返す。存在しなければ 404、listId が無ければ 400。
+	 */
+	@PutMapping("/{id}/position")
+	public CardResponse move(@PathVariable("id") long id, @Valid @RequestBody CardMoveRequest request) {
+		return CardResponse.from(cardService.move(id, request));
 	}
 
 }

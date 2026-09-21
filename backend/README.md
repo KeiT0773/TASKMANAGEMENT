@@ -57,6 +57,7 @@ taskkill //PID <PID> //F                        # そのプロセスを停止（
 | http://localhost:8080/api/cards/1 | カード 1 件の JSON（存在しない id は 404） | 1 件取得とエラー応答 |
 | `POST http://localhost:8080/api/cards`（下記 curl 例） | `201 Created` と登録したカードの JSON | カードの登録と、登録後の優先度順並べ替え |
 | `PUT http://localhost:8080/api/cards/1`（下記 curl 例） | `200` と編集後のカードの JSON | タイトル・説明文・期限・優先度の編集。優先度を変えたときだけ並べ替え |
+| `PUT http://localhost:8080/api/cards/1/position`（下記 curl 例） | `200` と移動後のカードの JSON | 別のリストへの移動と、同じリスト内の並べ替え。両リストの `displayOrder` を振り直す |
 
 `/api/health/db` がエラー（HTTP 500）になる場合は、DB が起動していないか、接続設定が `compose.yaml` と食い違っている。
 
@@ -106,7 +107,7 @@ backend/
   - `V1__create_list_and_card_tables.sql` — テーブル定義、制約、索引
   - `V2__insert_initial_lists.sql` — リストの初期データ
 - `V3__insert_sample_cards.sql` で画面モックと同じサンプルカード 6 件を投入する（開発用。データ設計書 7.）。
-- カード・リストの取得 API（`GET /api/lists`、`GET /api/cards`、`GET /api/cards/{id}`）、カードの登録 API（`POST /api/cards`）、カードの編集 API（`PUT /api/cards/{id}`）を実装済み。仕様は [API 設計書](../docs/api-design.md) を参照。登録時と、編集で優先度を変えたときは、そのリスト内が優先度順（高 → 中 → 低）に並べ直され、`displayOrder` が振り直される。移動・並べ替え・削除は未実装。
+- カード・リストの取得 API（`GET /api/lists`、`GET /api/cards`、`GET /api/cards/{id}`）、カードの登録 API（`POST /api/cards`）、編集 API（`PUT /api/cards/{id}`）、移動・並べ替え API（`PUT /api/cards/{id}/position`）を実装済み。仕様は [API 設計書](../docs/api-design.md) を参照。登録時と、編集で優先度を変えたときは、そのリスト内が優先度順（高 → 中 → 低）に並べ直される。移動・並べ替えでは並べ直さず、指定した位置にそのまま置く。削除は未実装。
 
 テーブルが作られたことは、次のコマンド（Git Bash）で確認できる。
 
@@ -139,4 +140,9 @@ curl "http://localhost:8080/api/cards?listId=todo"
 curl -i -X PUT http://localhost:8080/api/cards/1 -H "Content-Type: application/json" -d '{"title":"edited","description":null,"dueDate":"2026-10-01","priority":"low"}'
 # 優先度を変えたので、todo の中で low グループの末尾に移動している
 curl "http://localhost:8080/api/cards?listId=todo"
+
+# 移動・並べ替え（displayOrder は移動先で「自分を除いた並びの何番目か」。枚数以上なら末尾）
+curl -i -X PUT http://localhost:8080/api/cards/1/position -H "Content-Type: application/json" -d '{"listId":"doing","displayOrder":0}'
+# todo と doing の両方で displayOrder が 0 から振り直されている
+curl http://localhost:8080/api/cards
 ```

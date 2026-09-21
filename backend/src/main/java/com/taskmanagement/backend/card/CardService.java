@@ -103,6 +103,43 @@ public class CardService {
 		return card;
 	}
 
+	/**
+	 * カードを別のリストへ移動する、または同じリスト内で並べ替える（API 設計書 10.「処理」）。
+	 * 移動元・移動先のリストの displayOrder を 0 から振り直す。優先度順の並べ替えは行わず、
+	 * 指定された位置にそのまま置く（FR-04、FR-05、機能要件書 3.1）。
+	 */
+	@Transactional
+	public Card move(long id, CardMoveRequest request) {
+		Card card = findById(id);
+		String toListId = request.listId();
+		if (!boardListRepository.existsById(toListId)) {
+			throw new BoardListNotFoundException(toListId);
+		}
+		OffsetDateTime now = now();
+
+		// 移動元の並びからカードを外す
+		String fromListId = card.getListId();
+		List<Card> source = cardRepository.findByListIdOrderByDisplayOrderAsc(fromListId);
+		source.removeIf(c -> c.getId().equals(card.getId()));
+
+		// 移動先の並び（同じリストなら外したあとの並び）の指定位置に差し込む。枚数以上なら末尾
+		boolean sameList = fromListId.equals(toListId);
+		List<Card> target = sameList ? source : cardRepository.findByListIdOrderByDisplayOrderAsc(toListId);
+		int index = Math.min(request.displayOrder(), target.size());
+		target.add(index, card);
+		if (!sameList) {
+			card.moveTo(toListId, now);
+		}
+
+		// 両リストを 0 からの通し番号に振り直す（データ設計書 6.「振り直しの単位」）
+		renumber(target, now);
+		if (!sameList) {
+			renumber(source, now);
+		}
+
+		return card;
+	}
+
 	/** DB（timestamptz）の精度に合わせ、現在時刻をマイクロ秒に丸めて返す（API 設計書 2. 方針 5）。 */
 	private static OffsetDateTime now() {
 		return OffsetDateTime.now(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
