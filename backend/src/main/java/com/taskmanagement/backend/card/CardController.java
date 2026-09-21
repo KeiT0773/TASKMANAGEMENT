@@ -5,6 +5,7 @@ import java.util.List;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -18,7 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 import jakarta.validation.Valid;
 
 /**
- * カードの API（API 設計書 6.〜11.）。
+ * カードの API（API 設計書 6.〜12.）。
  * HTTP の要求・応答の変換だけを担当し、処理は CardService に委ねる。
  */
 @RestController
@@ -88,6 +89,16 @@ public class CardController {
 	@ResponseStatus(HttpStatus.NO_CONTENT)
 	public void sort() {
 		cardService.sortAllByPriority();
+	}
+
+	/**
+	 * DELETE /api/cards/{id} — カードを削除し、204 No Content を返す。存在しなければ 404。
+	 * 削除後はそのリストの displayOrder が詰められるため、フロントエンドは GET /api/cards?listId= で取り直す。
+	 */
+	@DeleteMapping("/{id}")
+	@ResponseStatus(HttpStatus.NO_CONTENT)
+	public void delete(@PathVariable("id") long id) {
+		cardService.delete(id);
 	}
 
 }

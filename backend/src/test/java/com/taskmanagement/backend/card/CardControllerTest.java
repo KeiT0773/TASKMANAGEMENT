@@ -630,4 +630,55 @@ class CardControllerTest {
 		assertThat(second).isEqualTo(first);
 	}
 
+	// ---------- 削除（DELETE /api/cards/{id}、API 設計書 12.） ----------
+
+	@Test
+	void カードを削除すると204を返しそのリストが連番に振り直される() {
+		// done の末尾に A, B, C を登録し、真ん中の B を削除する
+		long a = createCard("削除A", "low", "done");
+		long b = createCard("削除B", "low", "done");
+		long c = createCard("削除C", "low", "done");
+		List<Long> before = idsInOrder("done");
+
+		assertThat(mvc.delete().uri("/api/cards/" + b))
+				.hasStatus(HttpStatus.NO_CONTENT)
+				.body().isEmpty();
+
+		// 消えている
+		assertThat(mvc.get().uri("/api/cards/" + b)).hasStatus(HttpStatus.NOT_FOUND);
+
+		// 1 枚減って 0 からの連番（idsInOrder が検証）。残った A, C の相対順序はそのまま
+		List<Long> after = idsInOrder("done");
+		assertThat(after).hasSize(before.size() - 1).doesNotContain(b);
+		assertThat(after.indexOf(a)).isLessThan(after.indexOf(c));
+	}
+
+	@Test
+	void 存在しないカードを削除すると404を返す() {
+		assertThat(mvc.delete().uri("/api/cards/999999"))
+				.hasStatus(HttpStatus.NOT_FOUND)
+				.bodyJson()
+				.satisfies(json -> {
+					assertThat(json).extractingPath("$.status").isEqualTo(404);
+					assertThat(json).extractingPath("$.detail").asString().contains("999999");
+					assertThat(json).extractingPath("$.instance").isEqualTo("/api/cards/999999");
+				});
+	}
+
+	@Test
+	void 削除では優先度順に並べ直さない() {
+		// todo の先頭に low を置いた状態で別のカードを削除しても、low は先頭のまま
+		long low = createCard("先頭の低", "low", "todo");
+		long victim = createCard("消える方", "high", "todo");
+		assertThat(mvc.put().uri("/api/cards/" + low + "/position").contentType(JSON)
+				.content(moveBody("todo", 0))).hasStatusOk();
+		assertThat(idsInOrder("todo").get(0)).isEqualTo(low);
+
+		assertThat(mvc.delete().uri("/api/cards/" + victim)).hasStatus(HttpStatus.NO_CONTENT);
+
+		List<Long> after = idsInOrder("todo");
+		assertThat(after.get(0)).isEqualTo(low);
+		assertThat(after).doesNotContain(victim);
+	}
+
 }
