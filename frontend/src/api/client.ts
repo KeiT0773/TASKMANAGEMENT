@@ -1,5 +1,5 @@
 // API 呼び出しの共通処理（フロントエンド設計書 6.）。
-// 個々の API（lists.ts, cards.ts）はここの apiGet / apiPost を呼ぶだけの薄い関数にする。
+// 個々の API（lists.ts, cards.ts）はここの apiGet / apiPost / apiPut を呼ぶだけの薄い関数にする。
 
 /** RFC 9457 Problem Details（API 設計書 2.1）。type は省略される */
 interface ProblemDetail {
@@ -37,14 +37,24 @@ export function apiGet<T>(path: string): Promise<T> {
  * body は JSON に変換して送る。201 Created も 2xx なので成功として扱う。
  */
 export function apiPost<TBody, T>(path: string, body: TBody): Promise<T> {
+  return requestJson<T>('POST', path, body);
+}
+
+/** PUT 要求を送り、応答の JSON を T として返す。body は JSON に変換して送る。 */
+export function apiPut<TBody, T>(path: string, body: TBody): Promise<T> {
+  return requestJson<T>('PUT', path, body);
+}
+
+/** JSON の body を伴う要求（POST / PUT）の共通部分 */
+function requestJson<T>(method: 'POST' | 'PUT', path: string, body: unknown): Promise<T> {
   return request<T>(path, {
-    method: 'POST',
+    method,
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
 }
 
-/** GET と POST に共通する、fetch の実行と応答の判定 */
+/** すべてのメソッドに共通する、fetch の実行と応答の判定 */
 async function request<T>(path: string, init: RequestInit): Promise<T> {
   let res: Response;
   try {

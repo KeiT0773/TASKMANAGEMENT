@@ -13,13 +13,15 @@ interface Props {
   cards: CardData[];
   /** 「＋ カードを追加」からの登録。useBoard の addCard を渡す */
   onAddCard: (input: CardCreateInput) => Promise<void>;
+  /** カードをクリックしたとき。カード詳細を開く */
+  onCardClick: (id: number) => void;
 }
 
 /**
  * 1 つのリスト（列）。見出しと件数、カードの一覧、最下部に追加フォームを縦に並べる（SC-01）。
  * 追加フォームはスクロールする領域（.cards）の外に置き、カードが多くても常に見えるようにする。
  */
-export function BoardList({ list, cards, onAddCard }: Props) {
+export function BoardList({ list, cards, onAddCard, onCardClick }: Props) {
   return (
     <section className={styles.list}>
       <div className={styles.header}>
@@ -28,7 +30,7 @@ export function BoardList({ list, cards, onAddCard }: Props) {
       </div>
       <div className={styles.cards}>
         {cards.map((card) => (
-          <Card key={card.id} card={card} />
+          <Card key={card.id} card={card} onClick={() => onCardClick(card.id)} />
         ))}
       </div>
       <AddCardForm listId={list.id} onSubmit={onAddCard} />
