@@ -7,6 +7,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -15,7 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 import jakarta.validation.Valid;
 
 /**
- * カードの API（API 設計書 6.・7.・8.）。
+ * カードの API（API 設計書 6.〜9.）。
  * HTTP の要求・応答の変換だけを担当し、処理は CardService に委ねる。
  */
 @RestController
@@ -56,6 +57,15 @@ public class CardController {
 		Card card = cardService.create(request);
 		URI location = URI.create("/api/cards/" + card.getId());
 		return ResponseEntity.created(location).body(CardResponse.from(card));
+	}
+
+	/**
+	 * PUT /api/cards/{id} — タイトル・説明文・期限・優先度を編集し、200 と編集後のカードを返す。
+	 * 存在しなければ 404、入力チェックに通らなければ 400。
+	 */
+	@PutMapping("/{id}")
+	public CardResponse update(@PathVariable("id") long id, @Valid @RequestBody CardUpdateRequest request) {
+		return CardResponse.from(cardService.update(id, request));
 	}
 
 }

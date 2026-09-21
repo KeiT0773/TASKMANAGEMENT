@@ -67,26 +67,68 @@ public class CardService {
 
 		String title = request.title().strip();
 		String priority = request.priority() != null ? request.priority() : DEFAULT_PRIORITY;
-		// DB（timestamptz）の精度はマイクロ秒。Java の現在時刻はそれより細かいことがあるため、
-		// 保存前に丸めて、登録の応答と後で取得した値が一致するようにする（API 設計書 2. 方針 5）。
-		OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
+		OffsetDateTime now = now();
 
-		// 現在の並び（displayOrder 昇順）を取り、新しいカードをいったん末尾に置く。
+		// 現在の並び（displayOrder 昇順）を取り、新しいカードを末尾に置いてから優先度順に並べ直す。
 		List<Card> cards = cardRepository.findByListIdOrderByDisplayOrderAsc(listId);
 		Card card = new Card(title, priority, listId, cards.size(), now);
 		cards.add(card);
+		resortByPriority(cards, now);
 
-		// 高 → 中 → 低 に並べ直す。List.sort は安定ソート（同じ優先度どうしは元の順序を保つ）なので、
-		// 末尾に置いてから並べ替えれば、新しいカードは同じ優先度グループの末尾に入る（機能要件書 3.1）。
+		return cardRepository.save(card);
+	}
+
+	/**
+	 * カードの 4 項目を編集する（API 設計書 9.「処理」）。
+	 * 優先度が変わったときだけ、そのカードをリストの末尾に移してから優先度順に並べ直す（FR-08）。
+	 * それ以外の項目の編集では並びに触らない。
+	 */
+	@Transactional
+	public Card update(long id, CardUpdateRequest request) {
+		Card card = findById(id);
+		OffsetDateTime now = now();
+
+		boolean priorityChanged = !card.getPriority().equals(request.priority());
+		card.update(request.title().strip(), blankToNull(request.description()), request.dueDate(),
+				request.priority(), now);
+
+		if (priorityChanged) {
+			// いったん並びから外して末尾に置き直す → 変更後の優先度グループの末尾に入る（機能要件書 3.1）
+			List<Card> cards = cardRepository.findByListIdOrderByDisplayOrderAsc(card.getListId());
+			cards.removeIf(c -> c.getId().equals(card.getId()));
+			cards.add(card);
+			resortByPriority(cards, now);
+		}
+
+		return card;
+	}
+
+	/** DB（timestamptz）の精度に合わせ、現在時刻をマイクロ秒に丸めて返す（API 設計書 2. 方針 5）。 */
+	private static OffsetDateTime now() {
+		return OffsetDateTime.now(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
+	}
+
+	/** 空文字・空白のみを null にそろえる（データ設計書 2. 方針 4）。 */
+	private static String blankToNull(String value) {
+		return value == null || value.isBlank() ? null : value;
+	}
+
+	/**
+	 * 1 つのリストのカードを 高 → 中 → 低 に並べ直し、displayOrder を 0 から振り直す（機能要件書 3.1、データ設計書 6.）。
+	 * List.sort は安定ソート（同じ優先度どうしは元の順序を保つ）なので、操作したカードを末尾に置いてから呼べば
+	 * 同じ優先度グループの末尾に入る。
+	 * 既存のカードは JPA の管理下にあるため、値が変わったものはトランザクションの終了時に UPDATE される。
+	 */
+	private void resortByPriority(List<Card> cards, OffsetDateTime now) {
 		cards.sort(Comparator.comparingInt(c -> PRIORITY_ORDER.indexOf(c.getPriority())));
+		renumber(cards, now);
+	}
 
-		// 0 からの通し番号に振り直す（データ設計書 6.）。
-		// 既存のカードは JPA の管理下にあるため、値が変わったものはトランザクションの終了時に UPDATE される。
+	/** 並びのとおりに displayOrder を 0 からの通し番号にする。 */
+	private void renumber(List<Card> cards, OffsetDateTime now) {
 		for (int i = 0; i < cards.size(); i++) {
 			cards.get(i).assignDisplayOrder(i, now);
 		}
-
-		return cardRepository.save(card);
 	}
 
 }

@@ -2,6 +2,7 @@ package com.taskmanagement.backend.card;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 import org.junit.jupiter.api.Test;
@@ -250,6 +251,185 @@ class CardControllerTest {
 				.bodyJson()
 				.extractingPath("$.status")
 				.isEqualTo(400);
+	}
+
+	// ---------- 編集（PUT /api/cards/{id}、API 設計書 9.） ----------
+
+	/** テスト用にカードを登録し、その id を返す。@Transactional によりテスト後に消える。 */
+	private long createCard(String title, String priority, String listId) {
+		var result = mvc.post().uri("/api/cards").contentType(JSON)
+				.content("{\"title\":\"" + title + "\",\"priority\":\"" + priority + "\",\"listId\":\"" + listId + "\"}")
+				.exchange();
+		assertThat(result).hasStatus(HttpStatus.CREATED);
+		Number id = JsonPath.read(new String(result.getResponse().getContentAsByteArray(), StandardCharsets.UTF_8), "$.id");
+		return id.longValue();
+	}
+
+	private static String updateBody(String title, String description, String dueDate, String priority) {
+		return "{\"title\":" + jsonString(title) + ",\"description\":" + jsonString(description)
+				+ ",\"dueDate\":" + jsonString(dueDate) + ",\"priority\":" + jsonString(priority) + "}";
+	}
+
+	private static String jsonString(String value) {
+		return value == null ? "null" : "\"" + value + "\"";
+	}
+
+	@Test
+	void カードを編集すると200と編集後のカードを返す() {
+		long id = createCard("編集前", "medium", "doing");
+
+		assertThat(mvc.put().uri("/api/cards/" + id).contentType(JSON)
+				.content(updateBody("  編集後  ", "  ", "2026-10-01", "medium")))
+				.hasStatusOk()
+				.bodyJson()
+				.satisfies(json -> {
+					assertThat(json).extractingPath("$.id").asNumber().satisfies(n -> assertThat(n.longValue()).isEqualTo(id));
+					// タイトルは前後の空白を除いて保存、空白だけの説明文は null
+					assertThat(json).extractingPath("$.title").isEqualTo("編集後");
+					assertThat(json).extractingPath("$.description").isNull();
+					assertThat(json).extractingPath("$.dueDate").isEqualTo("2026-10-01");
+					assertThat(json).extractingPath("$.priority").isEqualTo("medium");
+					assertThat(json).extractingPath("$.listId").isEqualTo("doing");
+					String createdAt = JsonPath.read(json.getJson(), "$.createdAt");
+					String updatedAt = JsonPath.read(json.getJson(), "$.updatedAt");
+					assertThat(updatedAt).isGreaterThanOrEqualTo(createdAt);
+				});
+	}
+
+	@Test
+	void 説明文を入れ期限をnullにすると解除される() {
+		long id = createCard("期限あり", "low", "done");
+		assertThat(mvc.put().uri("/api/cards/" + id).contentType(JSON)
+				// JSON 文字列の中の \n（改行）。Java のソース上は \\n と書く
+				.content(updateBody("期限あり", "補足\\n2行目", "2026-10-01", "low")))
+				.hasStatusOk()
+				.bodyJson()
+				.extractingPath("$.dueDate").isEqualTo("2026-10-01");
+
+		assertThat(mvc.put().uri("/api/cards/" + id).contentType(JSON)
+				.content(updateBody("期限あり", "補足\\n2行目", null, "low")))
+				.hasStatusOk()
+				.bodyJson()
+				.satisfies(json -> {
+					assertThat(json).extractingPath("$.dueDate").isNull();
+					// 改行を保ったまま保存されている
+					assertThat(json).extractingPath("$.description").isEqualTo("補足\n2行目");
+				});
+	}
+
+	@Test
+	void 優先度を変えるとそのリストが並び替えられ変更後グループの末尾に入る() {
+		// todo の初期データは high / medium / low。low で登録し、high に変えると high グループの末尾へ
+		long id = createCard("優先度変更", "low", "todo");
+
+		assertThat(mvc.put().uri("/api/cards/" + id).contentType(JSON)
+				.content(updateBody("優先度変更", null, null, "high")))
+				.hasStatusOk();
+
+		assertThat(mvc.get().uri("/api/cards").param("listId", "todo"))
+				.hasStatusOk()
+				.bodyJson()
+				.satisfies(json -> {
+					List<Integer> orders = JsonPath.read(json.getJson(), "$[*].displayOrder");
+					List<String> priorities = JsonPath.read(json.getJson(), "$[*].priority");
+					List<Number> ids = JsonPath.read(json.getJson(), "$[*].id");
+
+					for (int i = 0; i < orders.size(); i++) {
+						assertThat(orders.get(i)).isEqualTo(i);
+					}
+					List<String> rank = List.of("high", "medium", "low");
+					for (int i = 1; i < priorities.size(); i++) {
+						assertThat(rank.indexOf(priorities.get(i))).isGreaterThanOrEqualTo(rank.indexOf(priorities.get(i - 1)));
+					}
+					int idx = -1;
+					for (int i = 0; i < ids.size(); i++) {
+						if (ids.get(i).longValue() == id) idx = i;
+					}
+					assertThat(idx).isGreaterThanOrEqualTo(0);
+					assertThat(priorities.get(idx)).isEqualTo("high");
+					if (idx + 1 < priorities.size()) {
+						assertThat(priorities.get(idx + 1)).isNotEqualTo("high");
+					}
+				});
+	}
+
+	@Test
+	void 優先度を変えなければ表示順は変わらない() {
+		long id = createCard("位置固定", "high", "todo");
+		Number before = JsonPath.read(
+				new String(mvc.get().uri("/api/cards/" + id).exchange().getResponse().getContentAsByteArray(), StandardCharsets.UTF_8),
+				"$.displayOrder");
+
+		assertThat(mvc.put().uri("/api/cards/" + id).contentType(JSON)
+				.content(updateBody("位置固定（改）", "説明を追加", null, "high")))
+				.hasStatusOk()
+				.bodyJson()
+				.satisfies(json -> {
+					assertThat(json).extractingPath("$.title").isEqualTo("位置固定（改）");
+					assertThat(json).extractingPath("$.displayOrder").asNumber()
+							.satisfies(n -> assertThat(n.intValue()).isEqualTo(before.intValue()));
+				});
+	}
+
+	@Test
+	void 編集でタイトルが空白だけなら400を返す() {
+		long id = createCard("空白編集", "medium", "todo");
+		assertThat(mvc.put().uri("/api/cards/" + id).contentType(JSON)
+				.content(updateBody("   ", null, null, "medium")))
+				.hasStatus(HttpStatus.BAD_REQUEST)
+				.bodyJson()
+				.satisfies(json -> {
+					assertThat(json).extractingPath("$.detail").isEqualTo("タイトルは必須です");
+					assertThat(json).extractingPath("$.errors[0].field").isEqualTo("title");
+				});
+	}
+
+	@Test
+	void 編集で説明文が2001文字なら400を返す() {
+		long id = createCard("長文", "medium", "todo");
+		assertThat(mvc.put().uri("/api/cards/" + id).contentType(JSON)
+				.content(updateBody("長文", "あ".repeat(2001), null, "medium")))
+				.hasStatus(HttpStatus.BAD_REQUEST)
+				.bodyJson()
+				.satisfies(json -> {
+					assertThat(json).extractingPath("$.detail").asString().contains("2000文字以内");
+					assertThat(json).extractingPath("$.errors[0].field").isEqualTo("description");
+				});
+	}
+
+	@Test
+	void 編集で優先度が不正または未指定なら400を返す() {
+		long id = createCard("優先度不正", "medium", "todo");
+		assertThat(mvc.put().uri("/api/cards/" + id).contentType(JSON)
+				.content(updateBody("優先度不正", null, null, "urgent")))
+				.hasStatus(HttpStatus.BAD_REQUEST)
+				.bodyJson()
+				.extractingPath("$.errors[0].field").isEqualTo("priority");
+
+		assertThat(mvc.put().uri("/api/cards/" + id).contentType(JSON)
+				.content(updateBody("優先度不正", null, null, null)))
+				.hasStatus(HttpStatus.BAD_REQUEST)
+				.bodyJson()
+				.extractingPath("$.detail").isEqualTo("優先度は必須です");
+	}
+
+	@Test
+	void 編集で期限が日付として読めなければ400を返す() {
+		long id = createCard("期限不正", "medium", "todo");
+		assertThat(mvc.put().uri("/api/cards/" + id).contentType(JSON)
+				.content(updateBody("期限不正", null, "2026/10/01", "medium")))
+				.hasStatus(HttpStatus.BAD_REQUEST)
+				.bodyJson()
+				.extractingPath("$.status").isEqualTo(400);
+	}
+
+	@Test
+	void 存在しないカードを編集すると404を返す() {
+		assertThat(mvc.put().uri("/api/cards/999999").contentType(JSON)
+				.content(updateBody("x", null, null, "medium")))
+				.hasStatus(HttpStatus.NOT_FOUND)
+				.bodyJson()
+				.extractingPath("$.detail").asString().contains("999999");
 	}
 
 }
