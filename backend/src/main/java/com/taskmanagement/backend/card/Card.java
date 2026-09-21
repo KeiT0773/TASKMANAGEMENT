@@ -18,7 +18,7 @@ import jakarta.persistence.Table;
  * - date → LocalDate（時刻を持たない）
  * - timestamptz → OffsetDateTime（タイムゾーン付きの日時）
  * - priority は high / medium / low の文字列。列挙型への置き換えは更新 API の実装時に判断する
- *   （API 設計書 10. 保留事項）
+ *   （API 設計書 12. 保留事項）
  *
  * 値の変更は setter ではなく、操作の意味を表すメソッド（assignDisplayOrder など）を通して行う。
  * どこからでも任意の項目を書き換えられる状態を避けるため。
@@ -71,6 +71,19 @@ public class Card {
 		this.listId = listId;
 		this.displayOrder = displayOrder;
 		this.createdAt = now;
+		this.updatedAt = now;
+	}
+
+	/**
+	 * 編集できる 4 項目を置き換える（API 設計書 9.）。
+	 * 呼び出し側（CardService）が title の前後の空白除去と、description の空文字 → null をそろえてから渡す。
+	 * 値が変わっていなくても updatedAt は更新する（利用者が「保存した」操作の時刻を残す）。
+	 */
+	public void update(String title, String description, LocalDate dueDate, String priority, OffsetDateTime now) {
+		this.title = title;
+		this.description = description;
+		this.dueDate = dueDate;
+		this.priority = priority;
 		this.updatedAt = now;
 	}
 
