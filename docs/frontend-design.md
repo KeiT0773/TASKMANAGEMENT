@@ -5,7 +5,7 @@
 | 項目 | 内容 |
 | --- | --- |
 | 文書名 | タスク管理アプリ フロントエンド設計書 |
-| 版数 | 4.0 |
+| 版数 | 5.0 |
 | 作成日 | 2026-09-20 |
 | 最終更新日 | 2026-09-21 |
 | 作成者 | KeiT0773 |
@@ -15,7 +15,7 @@
 
 本書は、[画面要件書](screen-requirements.md) で定義した画面を React でどう組み立てるかを定義する。具体的には、**画面をどのコンポーネントに分けるか、取得したデータをどこで保持するか、バックエンドの API をどう呼ぶか、区分値や日付をどう表示するか、開発サーバーからバックエンドへどう接続するか** を決める。
 
-1.0 では **ボード画面（SC-01）の表示**、2.0 で **カードの登録（FR-01）**、3.x で **カード詳細（SC-02）での編集（FR-02, FR-06, FR-07, FR-08）とドラッグ&ドロップによる移動・並べ替え（FR-04, FR-05）** を対象とした。本版（4.0）では **ツールバーと、全リストの優先度順並べ替え（FR-10）** を追加する。削除（FR-03）は、対応する API が [API 設計書](api-design.md) に追記された時点で本書にも追記する（11. 保留事項）。
+1.0 では **ボード画面（SC-01）の表示**、2.0 で **カードの登録（FR-01）**、3.x で **カード詳細（SC-02）での編集（FR-02, FR-06, FR-07, FR-08）とドラッグ&ドロップによる移動・並べ替え（FR-04, FR-05）** を対象とした。4.0 で **ツールバーと、全リストの優先度順並べ替え（FR-10）** を追加した。本版（5.0）では **カードの削除（FR-03）と、カード詳細の「カードを削除」ボタン** を追加し、これで FR-01〜FR-10 のすべてが本書の対象になる。
 
 本書が扱う範囲と、扱わない範囲は次のとおり。
 
@@ -36,6 +36,7 @@
 | 3.1 | 2026-09-21 | カード詳細の実装結果を反映。保存中に入力欄を無効にすると次の項目へのクリックが効かなくなるため、無効にせず保存を直列に送る方式に変更（8.6）。文言をラベルの中に置かない理由を補記 | KeiT0773 |
 | 3.2 | 2026-09-21 | ドラッグ&ドロップの実装結果を反映。ドラッグ中の見た目をモックの半透明から「影を付けて持ち上がって見せる」に変更（8.7）。`moveCard` のフック単体テストを追加し、テストの範囲（11.）を更新 | KeiT0773 |
 | 4.0 | 2026-09-21 | ツールバーと全リストの優先度順並べ替え（FR-10）を追加。`BoardToolbar` コンポーネント（4.）、一括並べ替えの流れ（5.6）、`apiPost` の `204` の扱いと `sortCardsByPriority`（6.1）、ツールバーの見た目と挙動（8.8）を定義。方針 7・8 と決定事項・保留事項を更新 | KeiT0773 |
+| 5.0 | 2026-09-21 | カードの削除（FR-03）を追加。`CardDetail` の `onDelete`（4.）、削除の流れ（5.7）、`apiDelete` と `deleteCard`（6.1）、カード詳細のフッター「カードを削除」と削除中・失敗の扱い（8.6）を定義。方針 6〜8 と決定事項・保留事項を更新 | KeiT0773 |
 
 ---
 
@@ -48,9 +49,9 @@
 | 3 | スタイル | CSS Modules を使い、画面モック `mock/style.css` をコンポーネントごとの `*.module.css` に分割して移植する。全体に効かせる指定（`*` と `body`）だけをグローバルの `index.css` に置く | モックで確認済みの見た目をそのまま再現できる。クラス名がコンポーネントごとに閉じるため、名前の衝突を気にしなくてよい |
 | 4 | 区分値の表示名 | `priority`（`high` / `medium` / `low`）を「高 / 中 / 低」に変換するのはフロントエンドの責務とする。リストの表示名（未着手 / 作業中 / 完了）は API の `name` をそのまま使う | [API 設計書](api-design.md) 2. 方針 7 |
 | 5 | 期限超過の判定 | フロントエンドが表示のたびに判定する | [データ設計書](data-design.md) 5.4。API は判定結果を返さない |
-| 6 | 今回置かない要素 | カード詳細の「カードを削除」ボタンは本版では置かない。「＋ カードを追加」は 2.0 で、カード詳細とドラッグ&ドロップは 3.0 で追加した | 対応する API が無く、押しても動かない要素を置くより、機能の実装時に追加する方が混乱がない |
-| 7 | 通信エラーの通知 | **取得**に失敗したときは、ボードの代わりにその旨の文言を表示する。**登録・編集**に失敗したときは、その入力欄の下に文言を表示し、入力した内容は消さずに残す。**移動**に失敗したときは、カードを元の位置に戻し、ボードの上部に文言を表示する。**全リストの優先度順並べ替え**に失敗したときも、ボードの上部に文言を表示する（並びは変えていないので戻す必要は無い） | FR-09「保存されていないことを利用者に分かるように通知する」。取得の失敗は画面全体が成り立たないのでボードごと差し替えるが、登録・編集の失敗は「その 1 件が保存されていない」ことなので、ボードは表示したまま該当の入力欄で伝える。入力を残すのは、利用者がもう一度打ち直さずに再送できるようにするため。移動と一括並べ替えには入力欄が無いので、ボード全体に対する文言で伝える。文言の場所と仕組みは 2 つで共通にする |
-| 8 | 書き込み後の画面反映 | 登録・編集・移動に成功したら、応答のカード 1 件を手元の一覧に差し込むのではなく、`GET /api/cards?listId=` で影響を受けたリスト（移動なら移動元と移動先の 2 つ）を取り直して置き換える。全リストの優先度順並べ替えは 3 リストすべてが対象なので、`GET /api/cards` で全件を取り直す | サーバーがリスト内を並べ直したり振り直したりするため、他のカードの `displayOrder` も変わりうる（[API 設計書](api-design.md) 8.・9.・10. の「画面へ反映する方法」）。取り直せば並べ替えの規則をフロントエンドに持たなくて済み、方針「フロントエンドでは並べ替えない」（5.1）を保てる |
+| 6 | 対応する API が無い要素は置かない | 画面要件書にあっても、対応する API が無い要素は置かず、機能の実装時に追加する。「＋ カードを追加」は 2.0、カード詳細とドラッグ&ドロップは 3.0、「カードを削除」は 5.0 で追加し、本版で置いていない要素は無くなった | 押しても動かない要素を置くより、機能の実装時に追加する方が混乱がない |
+| 7 | 通信エラーの通知 | **取得**に失敗したときは、ボードの代わりにその旨の文言を表示する。**登録・編集**に失敗したときは、その入力欄の下に文言を表示し、入力した内容は消さずに残す。**移動**に失敗したときは、カードを元の位置に戻し、ボードの上部に文言を表示する。**全リストの優先度順並べ替え**に失敗したときも、ボードの上部に文言を表示する（並びは変えていないので戻す必要は無い）。**削除**に失敗したときは、カード詳細を開いたまま、フッターの「カードを削除」ボタンの横に文言を表示する | FR-09「保存されていないことを利用者に分かるように通知する」。取得の失敗は画面全体が成り立たないのでボードごと差し替えるが、登録・編集の失敗は「その 1 件が保存されていない」ことなので、ボードは表示したまま該当の入力欄で伝える。入力を残すのは、利用者がもう一度打ち直さずに再送できるようにするため。移動と一括並べ替えには入力欄が無いので、ボード全体に対する文言で伝える。文言の場所と仕組みは 2 つで共通にする。削除にも入力欄は無いが、操作した場所（カード詳細）が開いたままなので、そこで伝える方が「今押した操作が失敗した」と分かりやすい |
+| 8 | 書き込み後の画面反映 | 登録・編集・移動に成功したら、応答のカード 1 件を手元の一覧に差し込むのではなく、`GET /api/cards?listId=` で影響を受けたリスト（移動なら移動元と移動先の 2 つ）を取り直して置き換える。全リストの優先度順並べ替えは 3 リストすべてが対象なので、`GET /api/cards` で全件を取り直す。削除は応答に本文が無いので、要求前に `cards` から引いておいた `listId` でそのリストを取り直す | サーバーがリスト内を並べ直したり振り直したりするため、他のカードの `displayOrder` も変わりうる（[API 設計書](api-design.md) 8.・9.・10.・12. の「画面へ反映する方法」）。取り直せば並べ替えの規則をフロントエンドに持たなくて済み、方針「フロントエンドでは並べ替えない」（5.1）を保てる |
 | 9 | ドラッグ&ドロップだけは楽観更新する | ドロップした瞬間に、API の応答を待たずに手元の `cards` をドロップ後の並びに変える。そのあと API を呼び、成功したら方針 8 のとおり取り直し、失敗したら取り直して元に戻す | ドロップ直後にカードが元の位置へ戻り、応答が来てから移動先に現れると、操作が失敗したように見える（D&D ライブラリも、ドロップ時に同期的に並びを更新することを前提にしている）。ここで行うのは「ドロップされた位置に置く」だけで、優先度順の並べ替え規則はフロントエンドに持たない（方針 8 の原則は維持） |
 
 ---
@@ -71,11 +72,11 @@ frontend/
     ├── types/
     │   └── board.ts            API の要求・応答に対応する型（Priority, ListId, BoardList, Card, CardCreateInput, CardUpdateInput, CardMoveInput）
     ├── api/
-    │   ├── client.ts           fetch の共通処理（apiGet, apiPost, apiPut, ApiError）
+    │   ├── client.ts           fetch の共通処理（apiGet, apiPost, apiPut, apiDelete, ApiError）
     │   ├── lists.ts            GET /api/lists
-    │   └── cards.ts            GET /api/cards、POST /api/cards、PUT /api/cards/{id}、PUT /api/cards/{id}/position、POST /api/cards/sort
+    │   └── cards.ts            GET /api/cards、POST /api/cards、PUT /api/cards/{id}、PUT /api/cards/{id}/position、POST /api/cards/sort、DELETE /api/cards/{id}
     ├── hooks/
-    │   └── useBoard.ts         リストとカードの取得・保持と、カードの登録・編集・移動・全リストの優先度順並べ替え
+    │   └── useBoard.ts         リストとカードの取得・保持と、カードの登録・編集・移動・全リストの優先度順並べ替え・削除
     ├── utils/
     │   ├── date.ts             日付の書式変換と期限超過の判定
     │   ├── errorMessage.ts     ApiError から表示文言への変換（6.3）
@@ -106,7 +107,7 @@ frontend/
 ```
 App
 ├── AppHeader
-└── Board                       ← useBoard() でデータを取得・登録・編集・移動・並べ替え。DragDropContext を張る
+└── Board                       ← useBoard() でデータを取得・登録・編集・移動・並べ替え・削除。DragDropContext を張る
     ├── BoardToolbar            ← ヘッダーの直下・リストの外。全リスト共通の操作（「優先度順に並べ替え」）
     ├── （移動・一括並べ替えに失敗したときの文言）
     ├── BoardList（未着手）      ← Droppable（カード一覧の領域）
@@ -117,7 +118,7 @@ App
     │       └── PriorityBadge   （優先度の選択肢のラベル）
     ├── BoardList（作業中）
     ├── BoardList（完了）
-    └── CardDetail              ← 選択中のカードがあるときだけ描画。ボードの手前に重ねる
+    └── CardDetail              ← 選択中のカードがあるときだけ描画。ボードの手前に重ねる。フッターに「カードを削除」
         └── PriorityBadge       （優先度の選択肢のラベル）
 ```
 
@@ -127,19 +128,19 @@ App
 | --- | --- | --- | --- |
 | `App` | `AppHeader` と `Board` を縦に並べる。それ以外の処理は持たない | なし | — |
 | `AppHeader` | 画面上部の青い帯にアプリ名「タスク管理ボード」を表示する | なし | SC-01 |
-| `Board` | `useBoard` を呼び、状態に応じて「読み込み中」「エラー文言」「3 つの `BoardList`」のいずれかを描画する。各 `BoardList` には、そのリストに属するカードと、登録用の `addCard`、カードをクリックしたときの処理を渡す。**選択中のカードの `id`**（`selectedCardId`）を持ち、該当カードがあれば `CardDetail` を描画する。`DragDropContext` を張り、ドロップ時（`onDragEnd`）に `moveCard` を呼ぶ。`BoardToolbar` を描画し、そこから `sortByPriority` を呼ぶ。移動・一括並べ替えに失敗したときの文言（`actionError`）もここで表示する | なし | SC-01、SC-02、画面構成 3.「3 つのリストを横に並べる」「別ページへは遷移しない」 |
+| `Board` | `useBoard` を呼び、状態に応じて「読み込み中」「エラー文言」「3 つの `BoardList`」のいずれかを描画する。各 `BoardList` には、そのリストに属するカードと、登録用の `addCard`、カードをクリックしたときの処理を渡す。**選択中のカードの `id`**（`selectedCardId`）を持ち、該当カードがあれば `CardDetail` を描画する。`DragDropContext` を張り、ドロップ時（`onDragEnd`）に `moveCard` を呼ぶ。`BoardToolbar` を描画し、そこから `sortByPriority` を呼ぶ。移動・一括並べ替えに失敗したときの文言（`actionError`）もここで表示する。`CardDetail` の `onDelete` から `deleteCard` を呼び、成功したら `selectedCardId` を `null` にして閉じる | なし | SC-01、SC-02、画面構成 3.「3 つのリストを横に並べる」「別ページへは遷移しない」 |
 | `BoardToolbar` | ヘッダーとボードの間の横一列。全リスト共通の操作を置く場所で、本版は「優先度順に並べ替え」ボタンだけを持つ。押すと `onSort` を呼び、終わるまでボタンを無効にして「並べ替え中…」を表示する。成否の通知は `Board` に任せる | `onSort: () => Promise<void>` | 画面要件書 3.「リストの枠の外に配置」、5.1 ツールバー、FR-10 |
 | `BoardList` | リストの見出し（`name`）と件数（`n件`）、カードの一覧、最下部に `AddCardForm` を縦に描画する。カードが多いときは列の中だけをスクロールさせる（`AddCardForm` はスクロール領域の外に置き、常に見える）。カード一覧の領域を `Droppable`（`droppableId = list.id`）にする | `list: BoardList`、`cards: Card[]`、`onAddCard: (input: CardCreateInput) => Promise<void>`、`onCardClick: (id: number) => void` | 画面構成 3.「カードを表示順に従って縦に並べる」、画面要件書 5.1、FR-04 |
 | `Card` | カード 1 枚。優先度バッジ、タイトル、期限の行を表示する。期限超過なら強調表示する。`Draggable`（`draggableId = String(card.id)`、`index` は列内の順番）でつかんで動かせ、クリックで `onClick` を呼ぶ。キーボードでも Enter で開ける | `card: Card`、`index: number`、`onClick: () => void` | 画面構成 3.「タイトル・優先度・期限が読み取れる」「カードをクリックするとカード詳細が開く」、FR-04、FR-05、FR-07、FR-08 |
 | `AddCardForm` | 閉じているときは「＋ カードを追加」ボタンを表示する。押すと、その場にタイトルの入力欄・優先度の選択（高 / 中 / 低）・「追加」「キャンセル」ボタンを表示する。入力内容・開閉・送信中・失敗の状態を自分で持ち、送信は `onSubmit` に委ねる（8.5） | `listId: ListId`、`onSubmit: (input: CardCreateInput) => Promise<void>` | FR-01、画面要件書 5.1「カード追加の入力欄」 |
-| `CardDetail` | カード詳細（SC-02）。ボードの手前に重ねるモーダルで、タイトル・説明文・期限・優先度の入力欄と「閉じる」ボタンを持つ。項目ごとの下書き・保存中・失敗の状態を自分で持ち、項目が確定したときに `onSave` へ 4 項目をまとめて渡す（8.6）。閉じる操作は `onClose` に委ねる | `card: Card`、`onSave: (input: CardUpdateInput) => Promise<void>`、`onClose: () => void` | SC-02、FR-02、FR-06、FR-07、FR-08 |
+| `CardDetail` | カード詳細（SC-02）。ボードの手前に重ねるモーダルで、タイトル・説明文・期限・優先度の入力欄と「閉じる」ボタン、フッターに「カードを削除」ボタンを持つ。項目ごとの下書き・保存中・失敗の状態を自分で持ち、項目が確定したときに `onSave` へ 4 項目をまとめて渡す（8.6）。「カードを削除」を押したら確認せずに `onDelete` を呼び、削除中・失敗の状態も自分で持つ。閉じる操作は `onClose` に委ねる | `card: Card`、`onSave: (input: CardUpdateInput) => Promise<void>`、`onDelete: () => Promise<void>`、`onClose: () => void` | SC-02、FR-02、FR-03、FR-06、FR-07、FR-08 |
 | `PriorityBadge` | 優先度を表示名（高 / 中 / 低）と色で表示する | `priority: Priority` | FR-08「色付きの表示」 |
 
-`AddCardForm` と `CardDetail` が API を直接呼ばず `onSubmit` を受け取るのは、**カードの一覧（`cards`）を持っているのが `useBoard` だけ** だからである。登録後の一覧の更新は `useBoard` の `addCard`（5.3）が行い、`AddCardForm` は「送信して、成功か失敗かを知る」ことだけに責任を持つ。`CardDetail` も同じで、編集後の一覧の更新は `useBoard` の `updateCard`（5.4）が行う。この分け方にしておくと、これらのコンポーネントのテストは渡した関数の呼ばれ方を見るだけで済む。
+`AddCardForm` と `CardDetail` が API を直接呼ばず `onSubmit` を受け取るのは、**カードの一覧（`cards`）を持っているのが `useBoard` だけ** だからである。登録後の一覧の更新は `useBoard` の `addCard`（5.3）が行い、`AddCardForm` は「送信して、成功か失敗かを知る」ことだけに責任を持つ。`CardDetail` も同じで、編集後の一覧の更新は `useBoard` の `updateCard`（5.4）が、削除後の更新は `deleteCard`（5.7）が行う。この分け方にしておくと、これらのコンポーネントのテストは渡した関数の呼ばれ方を見るだけで済む。
 
 `BoardToolbar` は見た目上はヘッダーの直下でボード（3 列）の外にあるが、コンポーネントとしては `Board` の中に置く。`cards` と操作関数を持つ `useBoard` を呼んでいるのが `Board` であり、`App` や `AppHeader` に状態を持ち上げるより、ボード全体に対する操作を `Board` にまとめる方が単純だからである。
 
-`CardDetail` に渡す `card` は、`Board` が `selectedCardId` で `useBoard` の `cards` から探したものである。カード詳細を開くときに `GET /api/cards/{id}` は呼ばない。利用者は 1 名で、手元の `cards` は書き込みのたびに取り直しているため（方針 8）、常に最新だからである。`cards` にそのカードが無くなったとき（将来の削除）は `CardDetail` を閉じる。
+`CardDetail` に渡す `card` は、`Board` が `selectedCardId` で `useBoard` の `cards` から探したものである。カード詳細を開くときに `GET /api/cards/{id}` は呼ばない。利用者は 1 名で、手元の `cards` は書き込みのたびに取り直しているため（方針 8）、常に最新だからである。`cards` にそのカードが無くなったとき（削除後）は `CardDetail` を描画しない。
 
 ---
 
@@ -260,34 +261,55 @@ BoardToolbar の「優先度順に並べ替え」を押す
 
 失敗したときは `ApiError` を投げ、`cards` は変更しない。`Board` が上部に文言を出す（移動の失敗と同じ場所・同じ仕組み）。ドラッグ&ドロップと違い **楽観更新はしない**。押した瞬間に画面が変わらなくても操作が失敗したようには見えず、並べ替えの規則をフロントエンドに持たない原則（方針 8・9）をそのまま守れるためである。
 
-`useBoard` が返すものは、5.2 の 4 つに `addCard`・`updateCard`・`moveCard`・`sortByPriority` を加えた 8 つになる。
+### 5.7 削除の流れ
+
+```ts
+deleteCard(id: number): Promise<void>
+```
+
+```
+CardDetail の「カードを削除」を押す（確認は求めない。要件定義書 決定事項 No.4）
+  → onDelete（= Board 経由で useBoard の deleteCard）を呼ぶ
+  → まず cards からそのカードの listId を引いておく（応答に本文が無いため、後から分からない）
+  → DELETE /api/cards/{id} を送る
+  → 成功（204、本文なし）したら GET /api/cards?listId=<そのリスト> で取り直し、cards のうちそのリストの分を置き換える
+    （listId が引けなかったときは GET /api/cards で全件を取り直す）
+  → cards からそのカードが消えるので、Board は CardDetail を描画しなくなる。Board は selectedCardId も null に戻す
+```
+
+失敗したときは `ApiError` を投げ、`cards` は変更しない。`CardDetail` はフッターに文言を出し、開いたままにする（8.6）。もう一度「カードを削除」を押せば再送できる。
+
+削除でも **楽観更新はしない**。押した瞬間にカードが消えなくても操作が失敗したようには見えず（応答が返るまで「削除中…」を出す）、取り直しの 1 通りにそろえる方が単純だからである（方針 8）。削除後にサーバーがそのリストの `displayOrder` を詰める（[API 設計書](api-design.md) 12.「処理」）ため、手元の `cards` から 1 件を取り除くだけでは `displayOrder` が古いままになる。画面は配列の順番で描画しているので実害は無いが、「書き込んだら取り直す」の原則を崩さない。
+
+`useBoard` が返すものは、5.2 の 4 つに `addCard`・`updateCard`・`moveCard`・`sortByPriority`・`deleteCard` を加えた 9 つになる。
 
 ---
 
 ## 6. API 呼び出しの方針
 
-### 6.1 共通処理 `apiGet` / `apiPost` / `apiPut`
+### 6.1 共通処理 `apiGet` / `apiPost` / `apiPut` / `apiDelete`
 
-`src/api/client.ts` に、GET・POST・PUT の共通処理を置く。個々の API（`lists.ts`、`cards.ts`）はこれを呼ぶだけの薄い関数とし、パスと要求・戻り値の型だけを持つ。
+`src/api/client.ts` に、GET・POST・PUT・DELETE の共通処理を置く。個々の API（`lists.ts`、`cards.ts`）はこれを呼ぶだけの薄い関数とし、パスと要求・戻り値の型だけを持つ。
 
 ```ts
 export async function apiGet<T>(path: string): Promise<T>;
 export async function apiPost<TBody, T>(path: string, body: TBody): Promise<T>;
 export async function apiPut<TBody, T>(path: string, body: TBody): Promise<T>;
+export async function apiDelete<T>(path: string): Promise<T>;
 ```
 
-`apiPost` と `apiPut` は `Content-Type: application/json` を付け、`body` を `JSON.stringify` して送る。3 つの関数は内部の共通処理（`fetch` の実行と応答の判定）を共有し、違いは HTTP メソッドと body の有無だけとする。
+`apiPost` と `apiPut` は `Content-Type: application/json` を付け、`body` を `JSON.stringify` して送る。`apiDelete` は `apiGet` と同じく body を持たない。4 つの関数は内部の共通処理（`fetch` の実行と応答の判定）を共有し、違いは HTTP メソッドと body の有無だけとする。
 
 | 状況 | 動作 |
 | --- | --- |
 | `fetch` 自体が失敗した（サーバー停止、ネットワーク未接続など。`TypeError` が投げられる） | `ApiError(null, 'サーバーに接続できません')` を投げる |
 | 応答が `2xx` 以外 | 本文を `ProblemDetail`（[API 設計書](api-design.md) 2.1）として読み、`ApiError(status, detail)` を投げる。本文が読めなければ `title` または HTTP ステータスの文言を使う。入力チェックのエラー（400）は `detail` に項目ごとのメッセージが連結されているので、`errors` は読まない |
-| 応答が `204 No Content` | 本文が無いので読まず、`undefined` を返す（`T` は `void`） |
+| 応答が `204 No Content` | 本文が無いので読まず、`undefined` を返す（`T` は `void`）。全リストの並べ替えと削除がこれに当たる |
 | 応答がそれ以外の `2xx`（`200`、`201`） | 本文の JSON を `T` として返す |
 
 `apiPost` は body が `undefined` のときは `Content-Type` も body も付けずに送る（`POST /api/cards/sort` のように要求 body が無い API のため）。
 
-`cards.ts` の関数は次の 5 つになる。
+`cards.ts` の関数は次の 6 つになる。
 
 ```ts
 export function getCards(listId?: ListId): Promise<Card[]>;                     // GET /api/cards[?listId=]
@@ -295,6 +317,7 @@ export function createCard(input: CardCreateInput): Promise<Card>;              
 export function updateCard(id: number, input: CardUpdateInput): Promise<Card>;  // PUT /api/cards/{id}
 export function moveCard(id: number, input: CardMoveInput): Promise<Card>;      // PUT /api/cards/{id}/position
 export function sortCardsByPriority(): Promise<void>;                         // POST /api/cards/sort
+export function deleteCard(id: number): Promise<void>;                          // DELETE /api/cards/{id}
 ```
 
 ### 6.2 `ApiError`
@@ -315,7 +338,7 @@ export class ApiError extends Error {
 | `500` | サーバーでエラーが発生しました。 |
 | その他 | `ApiError.message`（API が返した `detail`）をそのまま表示する。登録の 400 なら「タイトルは必須です」のような日本語の文言になる |
 
-この変換は `src/utils/errorMessage.ts` の `errorMessage(error: ApiError): string` に置き、ボード全体のエラー表示（`Board`）、登録失敗（`AddCardForm`）、編集失敗（`CardDetail`）、移動・一括並べ替えの失敗（`Board` 上部）のすべてから使う。同じ種類のエラーは画面のどこで起きても同じ文言にするため。
+この変換は `src/utils/errorMessage.ts` の `errorMessage(error: ApiError): string` に置き、ボード全体のエラー表示（`Board`）、登録失敗（`AddCardForm`）、編集・削除の失敗（`CardDetail`）、移動・一括並べ替えの失敗（`Board` 上部）のすべてから使う。同じ種類のエラーは画面のどこで起きても同じ文言にするため。
 
 ---
 
@@ -421,8 +444,9 @@ isOverdue(card) = card.dueDate !== null
 | `description` | `string` | `card.description ?? ''` | 説明文の下書き（入力欄は文字列なので `null` は `''` にする） |
 | `dueDate` | `string` | `card.dueDate ?? ''` | 期限の下書き（`<input type="date">` の値。未設定は `''`） |
 | `priority` | `Priority` | `card.priority` | 優先度 |
+| `deleting` | `boolean` | `false` | 削除中かどうか。「カードを削除」ボタンを無効にし、文言を「削除中…」にする（二重送信の防止） |
 | `saving` | `boolean` | `false` | 保存中かどうか。見出しの横に「保存中…」を出す。**入力欄は無効にしない**（無効にすると、タイトルを確定した直後に説明文をクリックしてもフォーカスが入らない）。連続して確定した保存は順番に送る（直列化）ことで、二重送信や追い越しを防ぐ |
-| `error` | `ApiError \| null` | `null` | 直前の保存で失敗したエラー |
+| `error` | `{ field, error: ApiError } \| null` | `null` | 直前の保存または削除で失敗したエラーと、文言を出す場所（`field` は 4 項目のいずれか、または `'delete'`） |
 
 下書きは `card` から初期化する。`Board` は `CardDetail` を `key={card.id}` で描画し、別のカードを開いたときは新しく作り直す（下書きが混ざらない）。
 
@@ -446,14 +470,30 @@ isOverdue(card) = card.dueDate !== null
 5. 失敗したら `error` にそのエラーを入れ、入力欄の下に `errorMessage(error)`（6.3）を `role="alert"` で表示する。下書きは消さない（打ち直さずに再送できる）。
 6. `saving = false` に戻す。
 
+#### フッターの「カードを削除」
+
+[画面要件書](screen-requirements.md) 5.2 と画面モック `mock/index.html` の `.modal-footer` / `.btn-delete` に合わせる。
+
+| 項目 | 内容 |
+| --- | --- |
+| 位置 | モーダルの最下部、本文との間に区切り線を引いたフッターの **右寄せ**。ボード上のカード表面には置かない（画面要件書 5.2「誤操作を防ぐため」）。「閉じる」（右上）から離れているので、閉じるつもりで削除することが起きにくい |
+| 見た目 | 白背景・赤枠（`#de350b`）・赤文字。hover で赤背景・白文字。無効時は薄く表示し `cursor` を既定に戻す（`BoardToolbar` のボタンと同じ扱い） |
+| 押したとき | **確認は求めない**（[要件定義書](requirements.md) 決定事項 No.4）。`deleting = true` にして `onDelete()` を呼ぶ。保存の直列化（`queueRef`）とは独立に送ってよい。削除が成功すればカードごと無くなるので、途中の保存の結果を待つ意味が無いため |
+| 成功 | `Board` が `CardDetail` を閉じる（5.7）。`CardDetail` 自身は何もしない |
+| 失敗 | `error = { field: 'delete', error }` にし、フッターのボタンの横に「削除できませんでした。＋ 6.3 の文言」を `role="alert"` で表示する。モーダルは開いたまま。もう一度押せば再送できる |
+| 削除中の「閉じる」 | 押せる（保存中と同じ扱い）。閉じても削除はそのまま続き、成功すれば `cards` から消える |
+
+`deleting` は成功・失敗にかかわらず終わったら `false` に戻す（`finally`）。成功後に `Board` が閉じるまでの一瞬だけ「削除中…」が残るが、実害は無い。
+
 #### 開閉
 
 | 操作 | 動作 |
 | --- | --- |
 | ボード上のカードをクリック（または Enter） | `Board` が `selectedCardId` にその `id` を入れ、`CardDetail` が描画される。開いたらタイトルの入力欄にフォーカスを当てる |
 | 「閉じる」ボタン、背景（モーダルの外側）のクリック、Escape | `onClose` を呼び、`Board` が `selectedCardId` を `null` にする。保存中（`saving`）でも閉じてよい（保存はそのまま続き、結果は `cards` に反映される） |
+| 「カードを削除」で削除に成功 | `Board` が `selectedCardId` を `null` にする。`cards` からカードが消えているので、`null` にしなくても描画されないが、古い `id` を持ち続けないために戻す |
 
-モーダルは `role="dialog"` と `aria-modal="true"` を付け、見出し「カード詳細」を `aria-labelledby` で結びつける。フッターの「カードを削除」ボタン（画面要件書 5.2）は削除 API が無いため本版では置かず、削除の実装時に追加する（方針 6）。
+モーダルは `role="dialog"` と `aria-modal="true"` を付け、見出し「カード詳細」を `aria-labelledby` で結びつける。
 
 ### 8.7 ドラッグ&ドロップ
 
@@ -531,6 +571,9 @@ isOverdue(card) = card.dueDate !== null
 | 19 | ツールバー（`BoardToolbar`）はヘッダーの直下・リストの外に置くが、コンポーネントとしては `useBoard` を持つ `Board` の中に置く | 4.2 | 2026-09-21 |
 | 20 | 全リストの優先度順並べ替えは楽観更新せず、`POST /api/cards/sort` の成功後に `GET /api/cards` で全件を取り直す | 5.6 | 2026-09-21 |
 | 21 | 移動と一括並べ替えの失敗は、`Board` 上部の同じ文言（`actionError`）で通知する。操作名を先頭に付けてどちらの失敗か分かるようにする | 2.、8.8 | 2026-09-21 |
+| 22 | 削除は確認を求めず、楽観更新もしない。`DELETE` の成功後に、要求前に `cards` から引いておいた `listId` でそのリストを取り直す | 5.7 | 2026-09-21 |
+| 23 | 削除の失敗はカード詳細のフッター（「カードを削除」の横）に出し、モーダルは開いたままにする。`Board` 上部の `actionError` は使わない | 2.、8.6 | 2026-09-21 |
+| 24 | 「カードを削除」はモーダル最下部のフッター右寄せに置き、ボード上のカード表面には置かない | 8.6 | 2026-09-21 |
 
 ---
 
@@ -538,9 +581,8 @@ isOverdue(card) = card.dueDate !== null
 
 | 事項 | 保留理由 | 決定時期 |
 | --- | --- | --- |
-| カードの削除（FR-03）と、カード詳細の「カードを削除」ボタン | 削除 API が無い | 削除 API の追記時 |
 | 通信エラー時の再試行の仕組み（FR-09） | 登録・編集の失敗は入力内容を残すので、利用者がもう一度確定すれば再送できる。移動の失敗は元に戻るので、もう一度ドラッグすればよい。自動の再試行や「再試行」ボタンは、この運用で不便が分かってから考える | 不便が分かったとき |
 | 登録・編集の楽観更新（応答を待たずに画面へ反映する） | カードは最大 100 件程度で応答は速く、取り直しで十分。並べ替えの規則をフロントエンドに持ち込まない方が単純。D&D だけは操作の性質上、楽観更新にした（方針 9） | 体感が遅いと分かったとき |
 | ドラッグ&ドロップ操作の自動テスト | `@hello-pangea/dnd` のドラッグはマウスの移動を伴い、jsdom で再現しにくい。並びの計算（`applyMove`）とドロップ結果の判定（`dragEndToMove`）を純粋関数にして単体テストで確かめ、ドロップ後の処理（楽観更新 → PUT → 取り直し／失敗時に戻す）は `useBoard.moveCard` をフック単体（`renderHook`）で確かめる。ドラッグ操作そのものはブラウザで手動確認する | ブラウザを使う自動テスト（Playwright など）を導入するとき |
 | ツールバーに置く操作の追加（絞り込み、表示の切り替えなど） | 本版は「優先度順に並べ替え」だけ。操作が増えたときに、ボタンの並び順やグループ分けを決める | 次の操作を追加するとき |
-| テストの範囲 | 3.0 で `CardDetail`（表示・項目ごとの保存・空タイトル・失敗表示・閉じる）と `utils/board.ts` に、4.0 で `BoardToolbar` と `Board`（並べ替え → 全件取り直し）に広げた。`useBoard` は `Board` のテストで代替するのを基本とし、`Board` から操作を再現できない `moveCard` だけフック単体のテストを持つ | `useBoard` がさらに複雑になったとき |
+| テストの範囲 | 3.0 で `CardDetail`（表示・項目ごとの保存・空タイトル・失敗表示・閉じる）と `utils/board.ts` に、4.0 で `BoardToolbar` と `Board`（並べ替え → 全件取り直し）に、5.0 で `CardDetail`（「カードを削除」→ `onDelete`、失敗の文言）と `Board`（削除 → そのリストの取り直し → 閉じる）に広げた。`useBoard` は `Board` のテストで代替するのを基本とし、`Board` から操作を再現できない `moveCard` だけフック単体のテストを持つ | `useBoard` がさらに複雑になったとき |
