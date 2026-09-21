@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ApiError, apiGet, apiPost } from './client';
+import { ApiError, apiDelete, apiGet, apiPost } from './client';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -43,6 +43,20 @@ describe('apiPost', () => {
     const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect(init.headers).toEqual({ 'Content-Type': 'application/json' });
     expect(init.body).toBe('{"title":"x"}');
+  });
+});
+
+describe('apiDelete', () => {
+  it('DELETE を body なしで送り、204 のときは undefined で解決する', async () => {
+    const fetchMock = vi.fn(() => Promise.resolve(new Response(null, { status: 204 })));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(apiDelete<void>('/api/cards/1')).resolves.toBeUndefined();
+
+    const [path, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(path).toBe('/api/cards/1');
+    expect(init.method).toBe('DELETE');
+    expect(init.body).toBeUndefined();
   });
 });
 

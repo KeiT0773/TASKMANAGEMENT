@@ -1,5 +1,5 @@
 // API 呼び出しの共通処理（フロントエンド設計書 6.）。
-// 個々の API（lists.ts, cards.ts）はここの apiGet / apiPost / apiPut を呼ぶだけの薄い関数にする。
+// 個々の API（lists.ts, cards.ts）はここの apiGet / apiPost / apiPut / apiDelete を呼ぶだけの薄い関数にする。
 
 /** RFC 9457 Problem Details（API 設計書 2.1）。type は省略される */
 interface ProblemDetail {
@@ -44,6 +44,13 @@ export function apiPost<TBody, T>(path: string, body: TBody): Promise<T> {
 /** PUT 要求を送り、応答の JSON を T として返す。body は JSON に変換して送る。 */
 export function apiPut<TBody, T>(path: string, body: TBody): Promise<T> {
   return requestJson<T>('PUT', path, body);
+}
+
+/**
+ * DELETE 要求を送る。body は無く、成功の応答は 204 No Content なので undefined を返す（T は void）。
+ */
+export function apiDelete<T>(path: string): Promise<T> {
+  return request<T>(path, { method: 'DELETE' });
 }
 
 /** JSON の body を伴う（または本文なしの）要求（POST / PUT）の共通部分 */
