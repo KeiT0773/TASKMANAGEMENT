@@ -172,4 +172,59 @@ describe('Board', () => {
     expect(screen.getByText('作業中')).toBeInTheDocument();
     expect(screen.getByText('資料作成')).toBeInTheDocument();
   });
+
+  it('カードをクリックすると詳細が開き、優先度を変えると PUT のあとにそのリストを取り直す', async () => {
+    // 資料作成（high）を low に変えると、サーバーが並べ直した結果として末尾に移る想定
+    const updated: Card = {
+      ...cards[0]!,
+      priority: 'low',
+      displayOrder: 1,
+      updatedAt: '2026-09-21T02:00:00Z',
+    };
+    const other: Card = {
+      ...cards[0]!,
+      id: 9,
+      title: '別のカード',
+      priority: 'medium',
+      displayOrder: 0,
+    };
+    const todoAfter: Card[] = [other, updated];
+
+    const fetchMock = vi.fn((path: string, init?: RequestInit) => {
+      if (path === '/api/lists') return Promise.resolve(jsonResponse(lists));
+      if (path === '/api/cards/1' && init?.method === 'PUT')
+        return Promise.resolve(jsonResponse(updated));
+      if (path === '/api/cards?listId=todo') return Promise.resolve(jsonResponse(todoAfter));
+      return Promise.resolve(jsonResponse(cards));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const user = userEvent.setup();
+    render(<Board />);
+    await user.click(await screen.findByRole('button', { name: /資料作成/ }));
+
+    const dialog = screen.getByRole('dialog', { name: 'カード詳細' });
+    expect(within(dialog).getByRole('textbox', { name: 'タイトル' })).toHaveValue('資料作成');
+
+    await user.click(within(dialog).getByRole('radio', { name: '低' }));
+
+    // 取り直した結果がボードに反映される（別のカードが現れ、件数が 2 件になる）
+    const todoColumn = screen.getByText('未着手').closest('section')!;
+    expect(await within(todoColumn).findByText('別のカード')).toBeInTheDocument();
+    expect(within(todoColumn).getByText('2件')).toBeInTheDocument();
+
+    // PUT の body は 4 項目
+    const putCall = fetchMock.mock.calls.find(([, init]) => init?.method === 'PUT');
+    expect(JSON.parse(putCall![1]!.body as string)).toEqual({
+      title: '資料作成',
+      description: null,
+      dueDate: null,
+      priority: 'low',
+    });
+
+    // 閉じるとボードだけになる
+    await user.click(within(dialog).getByRole('button', { name: '閉じる' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.getByText('作業中')).toBeInTheDocument();
+  });
 });

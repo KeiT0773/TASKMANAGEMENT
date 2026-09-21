@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
-import { createCard, getCards } from '../api/cards';
+import { createCard, getCards, updateCard as updateCardApi } from '../api/cards';
 import { ApiError } from '../api/client';
 import { getLists } from '../api/lists';
-import type { BoardList, Card, CardCreateInput } from '../types/board';
+import type { BoardList, Card, CardCreateInput, CardUpdateInput, ListId } from '../types/board';
 
 export interface BoardState {
   lists: BoardList[];
@@ -11,10 +11,12 @@ export interface BoardState {
   error: ApiError | null;
   /** カードを登録する（フロントエンド設計書 5.3）。失敗したときは ApiError を投げる */
   addCard: (input: CardCreateInput) => Promise<void>;
+  /** カードの 4 項目を編集する（フロントエンド設計書 5.4）。失敗したときは ApiError を投げる */
+  updateCard: (id: number, input: CardUpdateInput) => Promise<void>;
 }
 
 /**
- * ボードの表示に必要なリストとカードを取得して保持し、カードの登録も受け持つ（フロントエンド設計書 5.）。
+ * ボードの表示に必要なリストとカードを取得して保持し、カードの登録・編集も受け持つ（フロントエンド設計書 5.）。
  * 描画時に 1 回だけ、/api/lists と /api/cards を同時に要求する。
  */
 export function useBoard(): BoardState {
@@ -50,17 +52,40 @@ export function useBoard(): BoardState {
   }, []);
 
   /**
+   * 1 つのリストのカードを取り直し、cards のうちそのリストの分だけを置き換える。
+   * 直前の状態を引数に取る形にし、他の操作で変わった内容を上書きしないようにする。
+   */
+  const reloadList = useCallback(async (listId: ListId): Promise<void> => {
+    const fetched = await getCards(listId);
+    setCards((prev) => [...prev.filter((c) => c.listId !== listId), ...fetched]);
+  }, []);
+
+  /**
    * POST で登録したあと、そのリストのカードを取り直して置き換える。
    * 登録後はサーバーがリスト内を優先度順に並べ直し、他のカードの displayOrder も変わりうるため、
    * 応答の 1 件を差し込むのではなく取り直す（フロントエンド設計書 2. 方針 8）。
    * 失敗は呼び出し元（AddCardForm）に投げ、ボード全体の error には入れない（方針 7）。
    */
-  const addCard = useCallback(async (input: CardCreateInput): Promise<void> => {
-    await createCard(input);
-    const fetched = await getCards(input.listId);
-    // 直前の状態を引数に取る形にし、他の操作で変わった内容を上書きしないようにする
-    setCards((prev) => [...prev.filter((c) => c.listId !== input.listId), ...fetched]);
-  }, []);
+  const addCard = useCallback(
+    async (input: CardCreateInput): Promise<void> => {
+      await createCard(input);
+      await reloadList(input.listId);
+    },
+    [reloadList],
+  );
 
-  return { lists, cards, loading, error, addCard };
+  /**
+   * PUT で編集したあと、そのカードのリストを取り直して置き換える。
+   * 優先度を変えたときはサーバーがリスト内を並べ直すため、他の項目の編集と分岐を分けず常に取り直す（方針 8）。
+   * 応答のカードの listId を使う（編集では listId は変わらない）。
+   */
+  const updateCard = useCallback(
+    async (id: number, input: CardUpdateInput): Promise<void> => {
+      const updated = await updateCardApi(id, input);
+      await reloadList(updated.listId);
+    },
+    [reloadList],
+  );
+
+  return { lists, cards, loading, error, addCard, updateCard };
 }

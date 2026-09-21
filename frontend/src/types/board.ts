@@ -37,3 +37,14 @@ export interface CardCreateInput {
   priority: Priority;
   listId: ListId;
 }
+
+/**
+ * カード編集の要求 body（API 設計書 9.）。4 項目をまとめて送る。
+ * description と dueDate は未設定を null で表す（'' は送らない）
+ */
+export interface CardUpdateInput {
+  title: string;
+  description: string | null;
+  dueDate: string | null;
+  priority: Priority;
+}
