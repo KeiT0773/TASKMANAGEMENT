@@ -79,16 +79,17 @@ frontend/
     ├── main.tsx                React の起動（App を DOM に描画）
     ├── App.tsx                 画面全体（AppHeader + Board）
     ├── index.css               グローバルスタイル（* と body のみ）
-    ├── types/board.ts          API の応答に対応する型（Priority, ListId, BoardList, Card）
-    ├── api/                    client.ts（apiGet, ApiError）、lists.ts、cards.ts
-    ├── hooks/useBoard.ts       リストとカードの取得と、読み込み状態の保持
-    ├── utils/date.ts           日付の書式変換と期限超過の判定（+ テスト）
-    ├── constants/priority.ts   優先度の表示名
+    ├── types/board.ts          API の要求・応答に対応する型（Priority, ListId, BoardList, Card, CardCreateInput）
+    ├── api/                    client.ts（apiGet, apiPost, ApiError）、lists.ts、cards.ts
+    ├── hooks/useBoard.ts       リストとカードの取得・保持と、カードの登録（addCard）
+    ├── utils/                  date.ts（日付の書式変換と期限超過の判定 + テスト）、errorMessage.ts（エラー文言）
+    ├── constants/priority.ts   優先度の表示名と並び順
     ├── components/
     │   ├── AppHeader/          ヘッダー
     │   ├── Board/              ボード（3 列の親。読み込み中・エラーの表示。+ テスト）
     │   ├── BoardList/          1 つのリスト（列）
     │   ├── Card/               1 枚のカード（+ テスト）
+    │   ├── AddCardForm/        「＋ カードを追加」ボタンと入力フォーム（+ テスト）
     │   └── PriorityBadge/      優先度の色付きバッジ
     └── test/setup.ts           テストの共通設定
 ```
@@ -99,4 +100,6 @@ frontend/
 
 - ボード画面（SC-01）の表示を実装済み。起動時に `GET /api/lists` と `GET /api/cards` を呼び、3 つの列にカードを並べる。各カードには優先度バッジ（高 / 中 / 低）、タイトル、期限（`期限 MM/DD`）を表示し、期限を過ぎたカードは「（期限切れ）」付きの赤字にする（完了列のカードは除く）。
 - バックエンドに接続できないときは、ボードの代わりに「サーバーに接続できません」の文言を表示する。
-- カードの登録・編集・削除・移動、カード詳細（SC-02）は未実装（バックエンドに書き込み API が無いため）。
+- カードの登録（FR-01）を実装済み。各列の最下部の「＋ カードを追加」を押すと入力欄が開き、タイトルと優先度（初期値は「中」）を入れて「追加」または Enter で `POST /api/cards` を呼ぶ。成功するとその列を `GET /api/cards?listId=` で取り直し、優先度順（高 → 中 → 低）の位置に新しいカードが入る。入力欄は開いたままなので続けて追加できる。タイトルが空のときは何もしない。Escape か「キャンセル」で閉じる。
+- 登録に失敗したとき（入力エラー、サーバー停止など）は、ボードは表示したまま入力欄の下に文言を出し、入力内容は残す。
+- カードの編集・削除・移動、カード詳細（SC-02）は未実装（バックエンドに対応する API が無いため）。

@@ -1,4 +1,9 @@
-import type { BoardList as BoardListData, Card as CardData } from '../../types/board';
+import type {
+  BoardList as BoardListData,
+  Card as CardData,
+  CardCreateInput,
+} from '../../types/board';
+import { AddCardForm } from '../AddCardForm/AddCardForm';
 import { Card } from '../Card/Card';
 import styles from './BoardList.module.css';
 
@@ -6,10 +11,15 @@ interface Props {
   list: BoardListData;
   /** このリストに属するカード。API から返った順（displayOrder 昇順）のまま渡す */
   cards: CardData[];
+  /** 「＋ カードを追加」からの登録。useBoard の addCard を渡す */
+  onAddCard: (input: CardCreateInput) => Promise<void>;
 }
 
-/** 1 つのリスト（列）。見出しと件数、カードの一覧を縦に並べる（SC-01） */
-export function BoardList({ list, cards }: Props) {
+/**
+ * 1 つのリスト（列）。見出しと件数、カードの一覧、最下部に追加フォームを縦に並べる（SC-01）。
+ * 追加フォームはスクロールする領域（.cards）の外に置き、カードが多くても常に見えるようにする。
+ */
+export function BoardList({ list, cards, onAddCard }: Props) {
   return (
     <section className={styles.list}>
       <div className={styles.header}>
@@ -21,6 +31,7 @@ export function BoardList({ list, cards }: Props) {
           <Card key={card.id} card={card} />
         ))}
       </div>
+      <AddCardForm listId={list.id} onSubmit={onAddCard} />
     </section>
   );
 }

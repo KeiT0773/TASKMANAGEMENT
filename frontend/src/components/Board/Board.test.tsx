@@ -1,4 +1,5 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { BoardList, Card } from '../../types/board';
 import { Board } from './Board';
@@ -92,5 +93,83 @@ describe('Board', () => {
     render(<Board />);
 
     expect(await screen.findByRole('alert')).toHaveTextContent('サーバーでエラーが発生しました');
+  });
+
+  it('カードを登録すると POST のあとにそのリストを取り直し、新しい並びで表示する', async () => {
+    const created: Card = {
+      id: 3,
+      title: '買い物',
+      description: null,
+      dueDate: null,
+      priority: 'high',
+      listId: 'todo',
+      displayOrder: 1,
+      createdAt: '2026-09-21T01:00:00Z',
+      updatedAt: '2026-09-21T01:00:00Z',
+    };
+    // 登録後に取り直した todo の並び（サーバーが優先度順に並べ直した結果）
+    const todoAfter: Card[] = [cards[0], created];
+
+    const fetchMock = vi.fn((path: string, init?: RequestInit) => {
+      if (path === '/api/lists') return Promise.resolve(jsonResponse(lists));
+      if (path === '/api/cards' && init?.method === 'POST') {
+        return Promise.resolve(jsonResponse(created, 201));
+      }
+      if (path === '/api/cards?listId=todo') return Promise.resolve(jsonResponse(todoAfter));
+      return Promise.resolve(jsonResponse(cards));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const user = userEvent.setup();
+    render(<Board />);
+    const todoColumn = (await screen.findByText('未着手')).closest('section')!;
+
+    await user.click(within(todoColumn).getByRole('button', { name: '＋ カードを追加' }));
+    await user.type(within(todoColumn).getByRole('textbox'), '買い物');
+    await user.click(within(todoColumn).getByRole('radio', { name: '高' }));
+    await user.click(within(todoColumn).getByRole('button', { name: '追加' }));
+
+    // 新しいカードが表示され、未着手の件数が 2 件になる
+    expect(await within(todoColumn).findByText('買い物')).toBeInTheDocument();
+    expect(within(todoColumn).getByText('2件')).toBeInTheDocument();
+    // 他のリストは変わらない
+    expect(screen.getByText('実装')).toBeInTheDocument();
+
+    // POST の body は入力どおり
+    const postCall = fetchMock.mock.calls.find(([, init]) => init?.method === 'POST');
+    expect(postCall).toBeDefined();
+    expect(JSON.parse(postCall![1]!.body as string)).toEqual({
+      title: '買い物',
+      priority: 'high',
+      listId: 'todo',
+    });
+  });
+
+  it('登録に失敗してもボードは表示したままで、その列に文言を出す', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((path: string, init?: RequestInit) => {
+        if (path === '/api/lists') return Promise.resolve(jsonResponse(lists));
+        if (init?.method === 'POST') {
+          return Promise.resolve(
+            jsonResponse({ title: 'Bad Request', status: 400, detail: 'タイトルは必須です' }, 400),
+          );
+        }
+        return Promise.resolve(jsonResponse(cards));
+      }),
+    );
+
+    const user = userEvent.setup();
+    render(<Board />);
+    const todoColumn = (await screen.findByText('未着手')).closest('section')!;
+
+    await user.click(within(todoColumn).getByRole('button', { name: '＋ カードを追加' }));
+    await user.type(within(todoColumn).getByRole('textbox'), 'x');
+    await user.click(within(todoColumn).getByRole('button', { name: '追加' }));
+
+    expect(await within(todoColumn).findByRole('alert')).toHaveTextContent('タイトルは必須です');
+    // ボードは消えていない
+    expect(screen.getByText('作業中')).toBeInTheDocument();
+    expect(screen.getByText('資料作成')).toBeInTheDocument();
   });
 });
