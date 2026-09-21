@@ -561,4 +561,73 @@ class CardControllerTest {
 				.extractingPath("$.detail").asString().contains("999999");
 	}
 
+	// ---------- 全リストの優先度順並べ替え（POST /api/cards/sort、API 設計書 11.） ----------
+
+	private static final List<String> RANK = List.of("high", "medium", "low");
+
+	/** listId の優先度の並びが 高 → 中 → 低 の順（順位が単調に増える）であることを検証する */
+	private void assertSortedByPriority(String listId) {
+		String body = new String(mvc.get().uri("/api/cards").param("listId", listId).exchange()
+				.getResponse().getContentAsByteArray(), StandardCharsets.UTF_8);
+		List<String> priorities = JsonPath.read(body, "$[*].priority");
+		for (int i = 1; i < priorities.size(); i++) {
+			assertThat(RANK.indexOf(priorities.get(i)))
+					.as("%s の %d 番目", listId, i)
+					.isGreaterThanOrEqualTo(RANK.indexOf(priorities.get(i - 1)));
+		}
+	}
+
+	@Test
+	void 全リストを並べ替えると204を返し各リストが優先度順の連番になる() {
+		// 各リストに low を登録し、position API で先頭へ動かして未整列の状態を作る
+		for (String listId : List.of("todo", "doing", "done")) {
+			long low = createCard("先頭の低_" + listId, "low", listId);
+			createCard("末尾の高_" + listId, "high", listId);
+			assertThat(mvc.put().uri("/api/cards/" + low + "/position").contentType(JSON)
+					.content(moveBody(listId, 0))).hasStatusOk();
+			assertThat(idsInOrder(listId).get(0)).isEqualTo(low);
+		}
+
+		assertThat(mvc.post().uri("/api/cards/sort"))
+				.hasStatus(HttpStatus.NO_CONTENT)
+				.body().isEmpty();
+
+		for (String listId : List.of("todo", "doing", "done")) {
+			idsInOrder(listId); // 0 からの連番であることを検証
+			assertSortedByPriority(listId);
+		}
+	}
+
+	@Test
+	void 全リスト並べ替えでは同じ優先度の中の順序が保たれる() {
+		// done に medium を A, B, C の順で登録し、C を A の位置へ動かす → medium の中は C, A, B
+		long a = createCard("並替A", "medium", "done");
+		long b = createCard("並替B", "medium", "done");
+		long c = createCard("並替C", "medium", "done");
+		int idxA = idsInOrder("done").indexOf(a);
+		assertThat(mvc.put().uri("/api/cards/" + c + "/position").contentType(JSON)
+				.content(moveBody("done", idxA))).hasStatusOk();
+
+		assertThat(mvc.post().uri("/api/cards/sort")).hasStatus(HttpStatus.NO_CONTENT);
+
+		List<Long> after = idsInOrder("done");
+		assertThat(after.indexOf(c)).isLessThan(after.indexOf(a));
+		assertThat(after.indexOf(a)).isLessThan(after.indexOf(b));
+		assertSortedByPriority("done");
+	}
+
+	@Test
+	void 全リスト並べ替えは何回呼んでも結果が変わらない() {
+		assertThat(mvc.post().uri("/api/cards/sort")).hasStatus(HttpStatus.NO_CONTENT);
+		String first = new String(mvc.get().uri("/api/cards").exchange().getResponse().getContentAsByteArray(),
+				StandardCharsets.UTF_8);
+
+		assertThat(mvc.post().uri("/api/cards/sort")).hasStatus(HttpStatus.NO_CONTENT);
+		String second = new String(mvc.get().uri("/api/cards").exchange().getResponse().getContentAsByteArray(),
+				StandardCharsets.UTF_8);
+
+		// displayOrder も updatedAt も含めて全件が同じ（位置が変わらなければ updatedAt も更新しない）
+		assertThat(second).isEqualTo(first);
+	}
+
 }
