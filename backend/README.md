@@ -24,12 +24,13 @@ docker compose up -d
 
 このディレクトリ（`backend/`）で実行する。
 
-```powershell
-# ビルドとテスト
-.\gradlew build
+```bash
+# Git Bash
+# ビルド・コード検査（Checkstyle、javac の警告）・テスト
+./gradlew check
 
 # 起動
-.\gradlew bootRun
+./gradlew bootRun
 ```
 
 停止は起動したターミナルで `Ctrl+C`。
@@ -76,13 +77,23 @@ taskkill //PID <PID> //F                        # そのプロセスを停止（
 
 テーブルの作成・変更は **Flyway だけが行う**（`spring.jpa.hibernate.ddl-auto=none`）。SQL ファイルは `src/main/resources/db/migration/` に `V1__xxx.sql` の形式で置き、アプリ起動時に自動で適用される。
 
-> `.\gradlew build` に含まれる起動確認テストも DB へ接続するため、テスト実行前にも `docker compose up -d` が必要。
+> `./gradlew check` に含まれる起動確認テストも DB へ接続するため、テスト実行前にも `docker compose up -d` が必要。
+
+## コード検査
+
+`./gradlew check` は、テストに加えて次の 2 つのチェックを行う（[技術スタック](../docs/tech-stack.md) 3.「コード検査」）。どちらかが失敗するとビルドが止まる。
+
+| チェック | 内容 | 単体で実行する |
+| --- | --- | --- |
+| Checkstyle | `config/checkstyle/checkstyle.xml` のルール（未使用 import、波括弧の省略など）。結果は `build/reports/checkstyle/main.html` / `test.html` | `./gradlew checkstyleMain checkstyleTest` |
+| javac `-Xlint:all -Werror` | コンパイラの警告をすべて有効にし、警告があれば失敗にする（`build.gradle`） | `./gradlew compileJava compileTestJava` |
 
 ## 構成
 
 ```
 backend/
-├── build.gradle                 依存ライブラリとビルド設定
+├── build.gradle                 依存ライブラリとビルド設定（Checkstyle、javac -Xlint の設定を含む）
+├── config/checkstyle/           Checkstyle のルール
 ├── settings.gradle              プロジェクト名
 ├── gradlew / gradlew.bat        Gradle Wrapper（Gradle 本体を自動取得して実行する）
 └── src/

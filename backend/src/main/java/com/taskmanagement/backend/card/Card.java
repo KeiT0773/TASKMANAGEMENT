@@ -76,7 +76,7 @@ public class Card {
 
 	/**
 	 * 編集できる 4 項目を置き換える（API 設計書 9.）。
-	 * 呼び出し側（CardService）が title の前後の空白除去と、description の空文字 → null をそろえてから渡す。
+	 * title の前後の空白除去は CardUpdateRequest が、description の空文字 → null は CardService がそろえてから渡す。
 	 * 値が変わっていなくても updatedAt は更新する（利用者が「保存した」操作の時刻を残す）。
 	 */
 	public void update(String title, String description, LocalDate dueDate, String priority, OffsetDateTime now) {

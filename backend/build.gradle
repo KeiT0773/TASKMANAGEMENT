@@ -1,5 +1,7 @@
 plugins {
 	id 'java'
+	// コード規約のチェック（フロントエンドの oxlint に相当）。Gradle に同梱されており、追加のプラグイン取得は不要。
+	id 'checkstyle'
 	id 'org.springframework.boot' version '4.1.1'
 	id 'io.spring.dependency-management' version '1.1.7'
 }
@@ -40,4 +42,20 @@ dependencies {
 
 tasks.named('test') {
 	useJUnitPlatform()
+}
+
+// --- コード検査（技術スタック 3.「コード検査」） ------------------------------
+// javac の警告をすべて有効にし（-Xlint:all）、警告があればコンパイルを失敗させる（-Werror）。
+// serial（Serializable なクラスに serialVersionUID が無い）だけは除外する。
+// 例外クラスは RuntimeException を継承するため形式上 Serializable になるが、直列化して保存・送信することは無いため。
+tasks.withType(JavaCompile).configureEach {
+	options.compilerArgs.addAll(['-Xlint:all', '-Xlint:-serial', '-Werror'])
+}
+
+// Checkstyle。ルールは config/checkstyle/checkstyle.xml。./gradlew check（test を含む）で実行される。
+// 単体で実行するときは ./gradlew checkstyleMain checkstyleTest。結果は build/reports/checkstyle/ に出る。
+checkstyle {
+	toolVersion = '14.1.0'
+	configFile = file('config/checkstyle/checkstyle.xml')
+	maxWarnings = 0
 }

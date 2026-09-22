@@ -2,6 +2,7 @@ import { DragDropContext, type DropResult } from '@hello-pangea/dnd';
 import { useCallback, useState } from 'react';
 import { ApiError } from '../../api/client';
 import { useBoard } from '../../hooks/useBoard';
+import type { CardCreateInput, CardUpdateInput } from '../../types/board';
 import { dragEndToMove } from '../../utils/board';
 import { errorMessage } from '../../utils/errorMessage';
 import { BoardList } from '../BoardList/BoardList';
@@ -59,6 +60,33 @@ export function Board() {
     [runAction, sortByPriority],
   );
 
+  // 登録・編集・削除は失敗をそれぞれの入力欄（AddCardForm / CardDetail）で伝えるので、
+  // ここでは受け止めずに投げ直す。ただし成功したときは上部の文言を消す
+  // （フロントエンド設計書 8.7「次の移動・編集・登録が成功したときにも消す」）。
+  const handleAddCard = useCallback(
+    async (input: CardCreateInput) => {
+      await addCard(input);
+      setActionError(null);
+    },
+    [addCard],
+  );
+
+  const handleUpdateCard = useCallback(
+    async (id: number, input: CardUpdateInput) => {
+      await updateCard(id, input);
+      setActionError(null);
+    },
+    [updateCard],
+  );
+
+  const handleDeleteCard = useCallback(
+    async (id: number) => {
+      await deleteCard(id);
+      setActionError(null);
+    },
+    [deleteCard],
+  );
+
   if (loading) {
     return <p className={styles.message}>読み込み中…</p>;
   }
@@ -94,7 +122,7 @@ export function Board() {
               key={list.id}
               list={list}
               cards={cards.filter((c) => c.listId === list.id)}
-              onAddCard={addCard}
+              onAddCard={handleAddCard}
               onCardClick={setSelectedCardId}
             />
           ))}
@@ -105,9 +133,9 @@ export function Board() {
         <CardDetail
           key={selectedCard.id}
           card={selectedCard}
-          onSave={(input) => updateCard(selectedCard.id, input)}
+          onSave={(input) => handleUpdateCard(selectedCard.id, input)}
           onDelete={async () => {
-            await deleteCard(selectedCard.id);
+            await handleDeleteCard(selectedCard.id);
             // cards から消えるので描画されなくなるが、古い id を持ち続けないよう明示的に閉じる
             closeDetail();
           }}

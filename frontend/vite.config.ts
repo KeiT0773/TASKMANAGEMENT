@@ -20,7 +20,6 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     setupFiles: './src/test/setup.ts',
-    passWithNoTests: true, // テストがまだ無い段階でも npm test を成功させる
     css: false, // CSS Modules はクラス名だけあればよいので、テストでは CSS を処理しない
   },
 });

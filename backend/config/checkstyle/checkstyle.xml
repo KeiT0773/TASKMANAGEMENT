@@ -1,0 +1,58 @@
+<?xml version="1.0"?>
+<!DOCTYPE module PUBLIC
+    "-//Checkstyle//DTD Checkstyle Configuration 1.3//EN"
+    "https://checkstyle.org/dtds/configuration_1_3.dtd">
+
+<!--
+  このプロジェクトの Checkstyle ルール（技術スタック 3.「コード検査」）。
+  フロントエンドの oxlint に相当する、Java の機械的なチェック。
+
+  google_checks / sun_checks は使わない。前者は 2 スペースのインデント、後者は Javadoc の
+  必須化など、Spring Initializr の雛形（タブ、Javadoc 任意）と衝突するため。
+  ここでは「明らかな誤り・不要なコード・読みにくさ」だけを検出する小さなルールにとどめる。
+  各チェックの説明: https://checkstyle.org/checks/
+-->
+<module name="Checker">
+  <property name="charset" value="UTF-8"/>
+  <property name="severity" value="error"/>
+
+  <!-- ファイル末尾は改行で終える（.editorconfig の insert_final_newline と同じ） -->
+  <module name="NewlineAtEndOfFile">
+    <property name="lineSeparator" value="lf"/>
+  </module>
+
+  <!-- 1 行の長さ。import / package と URL を含む行は除外する -->
+  <module name="LineLength">
+    <property name="max" value="160"/>
+    <property name="ignorePattern" value="^package.*|^import.*|a href|href|http://|https://|ftp://"/>
+  </module>
+
+  <module name="TreeWalker">
+    <!-- import -->
+    <module name="AvoidStarImport"/>
+    <module name="RedundantImport"/>
+    <module name="UnusedImports"/>
+    <module name="IllegalImport"/> <!-- sun.* の使用を禁止 -->
+
+    <!-- ブロック・文 -->
+    <module name="NeedBraces"/>            <!-- if / for / while は必ず波括弧を付ける -->
+    <module name="EmptyBlock">
+      <property name="option" value="text"/> <!-- 空ブロックはコメントがあれば許す -->
+    </module>
+    <module name="EmptyStatement"/>        <!-- 単独の ; -->
+    <module name="MissingSwitchDefault"/>
+    <module name="SimplifyBooleanExpression"/>
+    <module name="SimplifyBooleanReturn"/>
+
+    <!-- クラス設計 -->
+    <module name="EqualsHashCode"/>        <!-- equals を override したら hashCode も -->
+    <module name="OneTopLevelClass"/>
+    <module name="OuterTypeFilename"/>     <!-- ファイル名と public クラス名を一致させる -->
+    <module name="ModifierOrder"/>         <!-- public static final の順 -->
+    <module name="RedundantModifier"/>
+
+    <!-- 表記 -->
+    <module name="UpperEll"/>              <!-- long リテラルは 10L（小文字 l は 1 と紛らわしい） -->
+    <module name="ArrayTypeStyle"/>        <!-- String[] args（String args[] は不可） -->
+  </module>
+</module>
