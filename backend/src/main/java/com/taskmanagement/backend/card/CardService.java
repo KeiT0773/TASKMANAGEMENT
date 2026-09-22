@@ -66,7 +66,8 @@ public class CardService {
 			throw new BoardListNotFoundException(listId);
 		}
 
-		String title = request.title().strip();
+		// title の前後の空白は CardCreateRequest が除いている
+		String title = request.title();
 		String priority = request.priority() != null ? request.priority() : DEFAULT_PRIORITY;
 		OffsetDateTime now = now();
 
@@ -90,7 +91,8 @@ public class CardService {
 		OffsetDateTime now = now();
 
 		boolean priorityChanged = !card.getPriority().equals(request.priority());
-		card.update(request.title().strip(), blankToNull(request.description()), request.dueDate(),
+		// title の前後の空白は CardUpdateRequest が除いている
+		card.update(request.title(), blankToNull(request.description()), request.dueDate(),
 				request.priority(), now);
 
 		if (priorityChanged) {

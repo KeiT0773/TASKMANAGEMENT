@@ -340,4 +340,42 @@ describe('Board', () => {
     await user.click(within(alert).getByRole('button', { name: '閉じる' }));
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
+
+  it('上部の失敗文言は、次の登録が成功したときにも消える', async () => {
+    // 並べ替えは 500 で失敗、登録は 201 で成功する
+    const created: Card = { ...cards[0]!, id: 3, title: '買い物', priority: 'medium' };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((path: string, init?: RequestInit) => {
+        if (path === '/api/lists') return Promise.resolve(jsonResponse(lists));
+        if (path === '/api/cards/sort') {
+          return Promise.resolve(
+            jsonResponse({ title: 'Internal Server Error', status: 500, detail: 'boom' }, 500),
+          );
+        }
+        if (path === '/api/cards' && init?.method === 'POST') {
+          return Promise.resolve(jsonResponse(created, 201));
+        }
+        if (path === '/api/cards?listId=todo') {
+          return Promise.resolve(jsonResponse([cards[0], created]));
+        }
+        return Promise.resolve(jsonResponse(cards));
+      }),
+    );
+
+    const user = userEvent.setup();
+    render(<Board />);
+    const todoColumn = (await screen.findByText('未着手')).closest('section')!;
+
+    await user.click(screen.getByRole('button', { name: '優先度順に並べ替え' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('並べ替えを保存できませんでした');
+
+    await user.click(within(todoColumn).getByRole('button', { name: '＋ カードを追加' }));
+    await user.type(within(todoColumn).getByRole('textbox'), '買い物');
+    await user.click(within(todoColumn).getByRole('button', { name: '追加' }));
+
+    // 登録が成功して反映されると、上部の文言は消えている（フロントエンド設計書 8.7）
+    expect(await within(todoColumn).findByText('買い物')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
 });

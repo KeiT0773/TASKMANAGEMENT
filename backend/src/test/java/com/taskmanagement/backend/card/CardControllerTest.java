@@ -135,7 +135,8 @@ class CardControllerTest {
 					assertThat(json).extractingPath("$.dueDate").isNull();
 					assertThat(json).extractingPath("$.priority").isEqualTo("low");
 					assertThat(json).extractingPath("$.listId").isEqualTo("doing");
-					assertThat(json).extractingPath("$.displayOrder").asNumber().satisfies(n -> assertThat(n.intValue()).isGreaterThanOrEqualTo(0));
+					assertThat(json).extractingPath("$.displayOrder").asNumber()
+							.satisfies(n -> assertThat(n.intValue()).isGreaterThanOrEqualTo(0));
 					// 日時は UTC（末尾 Z）。登録直後は createdAt と updatedAt が同じ
 					String createdAt = JsonPath.read(json.getJson(), "$.createdAt");
 					assertThat(createdAt).endsWith("Z");
@@ -215,6 +216,18 @@ class CardControllerTest {
 					assertThat(json).extractingPath("$.detail").asString().contains("100文字以内");
 					assertThat(json).extractingPath("$.errors[0].field").isEqualTo("title");
 				});
+	}
+
+	@Test
+	void タイトルは前後の空白を除いてから100文字以内かを判定する() {
+		// 空白込みでは 102 文字だが、除けば 100 文字なので登録できる（API 設計書 8.「前後の空白を除いて 100 文字以内」）
+		String title100 = "あ".repeat(100);
+		assertThat(mvc.post().uri("/api/cards").contentType(JSON)
+				.content("{\"title\":\" " + title100 + " \",\"listId\":\"todo\"}"))
+				.hasStatus(HttpStatus.CREATED)
+				.bodyJson()
+				.extractingPath("$.title")
+				.isEqualTo(title100);
 	}
 
 	@Test
@@ -343,7 +356,9 @@ class CardControllerTest {
 					}
 					int idx = -1;
 					for (int i = 0; i < ids.size(); i++) {
-						if (ids.get(i).longValue() == id) idx = i;
+						if (ids.get(i).longValue() == id) {
+							idx = i;
+						}
 					}
 					assertThat(idx).isGreaterThanOrEqualTo(0);
 					assertThat(priorities.get(idx)).isEqualTo("high");

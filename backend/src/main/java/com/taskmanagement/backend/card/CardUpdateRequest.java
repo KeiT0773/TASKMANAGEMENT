@@ -13,6 +13,9 @@ import jakarta.validation.constraints.Size;
  *
  * description と dueDate は null 可。description の空文字・空白のみは CardService が null にそろえる。
  * dueDate が日付として読めない文字列のときは Jackson の変換で失敗し、Spring が 400 を返す。
+ *
+ * title は「前後の空白を除いて 1 文字以上、100 文字以内」（API 設計書 9.）。
+ * コンパクトコンストラクタで先に空白を除いておき、@NotBlank と @Size が除いた後の値に掛かるようにする。
  */
 public record CardUpdateRequest(
 		@NotBlank(message = "タイトルは必須です")
@@ -27,4 +30,9 @@ public record CardUpdateRequest(
 		@NotBlank(message = "優先度は必須です")
 		@Pattern(regexp = "high|medium|low", message = "優先度は high / medium / low のいずれかで指定してください")
 		String priority) {
+
+	public CardUpdateRequest {
+		title = title == null ? null : title.strip();
+	}
+
 }

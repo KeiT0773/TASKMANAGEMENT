@@ -185,3 +185,9 @@ npm run dev
 - `./gradlew bootRun --args='--server.port=8081'`、`SERVER_PORT=8081 ...` のように、バックエンドを 8080 以外で起動する
 
 理由：プロキシ設定・README の URL・ユーザーがブラウザで開いているページはすべて既定ポートを前提にしている。別ポートで起動すると、ユーザーが見ているサーバーと Claude が確認したサーバーが別物になり、「Claude の環境では動くのにユーザーの画面では動かない」食い違いが生じる。動作確認のために Claude が立てたサーバーは、確認後に必ず停止する。
+
+---
+
+## 7. 品質チェック・レビュー
+
+実装の品質チェックやレビューを行うとき、および PR を作る前のセルフレビューは、スキル `quality-review`（[.claude/skills/quality-review/SKILL.md](.claude/skills/quality-review/SKILL.md)）に従う。機械チェック（`cd frontend && npm run check`、`cd backend && ./gradlew check`）→ 文書との突き合わせ → 標準からのずれ、の順で確認し、文書と実装が食い違っていれば文書を正として実装を直す。

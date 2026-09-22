@@ -48,14 +48,16 @@ npm run dev
 
 ## npm スクリプト
 
-| コマンド          | 内容                                                                  |
-| ----------------- | --------------------------------------------------------------------- |
-| `npm run dev`     | 開発サーバーを起動する                                                |
-| `npm run build`   | 型チェック（`tsc -b`）のあと、配布用ファイルを `dist/` に出力する     |
-| `npm run preview` | `dist/` の内容を確認用に配信する                                      |
-| `npm run lint`    | oxlint でコードを検査する                                             |
-| `npm run format`  | Prettier でコードを整形する（`format:check` は整形せず確認だけ）      |
-| `npm test`        | Vitest でテストを 1 回実行する（`test:watch` は変更を監視して再実行） |
+| コマンド            | 内容                                                                     |
+| ------------------- | ------------------------------------------------------------------------ |
+| `npm run dev`       | 開発サーバーを起動する                                                   |
+| `npm run build`     | 型チェック（`tsc -b`）のあと、配布用ファイルを `dist/` に出力する        |
+| `npm run preview`   | `dist/` の内容を確認用に配信する                                         |
+| `npm run lint`      | oxlint でコードを検査する（warning もエラー扱い）                        |
+| `npm run format`    | Prettier でコードを整形する（`format:check` は整形せず確認だけ）         |
+| `npm run typecheck` | TypeScript の型検査だけを行う（`tsc -b`）                                |
+| `npm test`          | Vitest でテストを 1 回実行する（`test:watch` は変更を監視して再実行）    |
+| `npm run check`     | lint → format:check → typecheck → test を順に実行する。PR を出す前に通す |
 
 ## バックエンドへの接続
 
