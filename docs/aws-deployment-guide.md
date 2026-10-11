@@ -5,7 +5,7 @@
 | 項目 | 内容 |
 | --- | --- |
 | 文書名 | タスク管理アプリ AWS デプロイ手順書 |
-| 版数 | 1.0 |
+| 版数 | 1.1 |
 | 作成日 | 2026-10-11 |
 | 最終更新日 | 2026-10-11 |
 | 作成者 | KeiT0773 |
@@ -13,7 +13,7 @@
 | 上位文書 | [インフラ設計書](infra-design.md) |
 | 関連文書 | [技術スタック](tech-stack.md)、[開発フロー](development-workflow.md) |
 
-本書は、[インフラ設計書](infra-design.md) で定めた AWS の構成を、**AWS CLI と Terraform を使ってコマンドラインから** 構築・更新・停止する手順をまとめたものである。AWS のマネジメントコンソール（ブラウザの管理画面）での操作は、最初のアカウント設定を除いて行わない。
+本書は、[インフラ設計書](infra-design.md) で定めた AWS の構成を、**AWS CLI と Terraform を使ってコマンドラインから** 構築・更新・休止・再開する手順をまとめたものである。AWS のマネジメントコンソール（ブラウザの管理画面）での操作は、最初のアカウント設定を除いて行わない。
 
 AWS・Terraform・IaC に初めて触れる前提で、各手順の前に「何をしているのか」を解説する。手順だけを知りたいときは 10. の早見表を見る。
 
@@ -22,6 +22,7 @@ AWS・Terraform・IaC に初めて触れる前提で、各手順の前に「何�
 | 版数 | 日付 | 変更内容 | 変更者 |
 | --- | --- | --- | --- |
 | 1.0 | 2026-10-11 | 初版作成。IaC・Terraform・AWS の基礎解説、AWS CLI の認証設定、state の置き場の準備、デプロイ・停止・撤去・トラブルシューティングの手順を記載 | KeiT0773 |
+| 1.1 | 2026-10-11 | 使わない期間はすべてのリソースを `terraform destroy` で撤去する運用（[インフラ設計書](infra-design.md) 1.1）に合わせ、7. を「費用・休止・再開」に書き直した（スナップショットによるデータの引き継ぎ、休止・再開のスクリプト、利用をやめるときの片付け）。4.5 の予算を $20 に変更。6.1 の変数、8.、9.、10. を対応させて更新 | KeiT0773 |
 
 ### 1.2 本書のコマンドについて
 
@@ -220,7 +221,9 @@ flowchart TD
     C --> D["6.1 初回デプロイ<br/>terraform init → ECR 作成 → イメージ登録<br/>→ plan → apply → 画面の配置"]
     D --> E["動作確認"]
     E --> F["6.2〜6.4 更新デプロイ<br/>（コードを変えるたび）"]
-    E --> G["7. 停止・再開・撤去<br/>（使わない期間）"]
+    E --> G["7.2 休止（すべて撤去）<br/>使い終わったら"]
+    G --> H["7.3 再開（作り直し）<br/>使うとき"]
+    H --> G
 ```
 
 ### 3.2 必要なツール
@@ -371,17 +374,17 @@ $ aws iam delete-access-key --user-name <IAM ユーザー名> --access-key-id <�
 
 ### 4.5 費用アラートを設定する（AWS Budgets）
 
-使いすぎに早く気づくため、**デプロイの前に** 月額予算と通知を設定する。予算は [インフラ設計書](infra-design.md) 11. の見積もり（約 $65〜75）より少し上の $80 とする。
+使いすぎに早く気づくため、**デプロイの前に** 月額予算と通知を設定する。予算は $20 とする（[インフラ設計書](infra-design.md) 11.3）。使わない期間は休止する（7.）前提なので、普段の費用は月数ドルに収まる。休止し忘れて数日つけっぱなしにすると $16（予算の 80%）を超え、メールが届く。
 
 ```bash
 # 自分のアカウント ID を変数に入れる
 $ ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 
-# 予算の定義（月額 80 ドル、実費ベース）
+# 予算の定義（月額 20 ドル、実費ベース）
 $ cat > budget.json <<'EOF'
 {
   "BudgetName": "taskmanagement-monthly",
-  "BudgetLimit": { "Amount": "80", "Unit": "USD" },
+  "BudgetLimit": { "Amount": "20", "Unit": "USD" },
   "TimeUnit": "MONTHLY",
   "BudgetType": "COST"
 }
@@ -483,6 +486,8 @@ $ aws s3api get-public-access-block --bucket "$STATE_BUCKET"
 
 ### 6.1 初回デプロイ
 
+ここでは仕組みを理解するため、1 段ずつ手で実行する。2 回目以降（休止からの再開）は、同じことを 7.3 のスクリプトで一括して行う。
+
 #### 前提
 
 - 段階 2・3 の PR がマージされ、`main` を手元に取り込んでいる（`git switch main && git pull --ff-only`）
@@ -500,7 +505,7 @@ $ cp infra/terraform/terraform.tfvars.example infra/terraform/terraform.tfvars
 | 変数 | 意味 | 初回の値 |
 | --- | --- | --- |
 | `backend_image_tag` | ECS で動かすイメージのタグ（Git のコミットハッシュ） | (4) で決まる |
-| `ecs_desired_count` | 動かしておくタスクの数。0 にすると停止 | `1` |
+| `db_snapshot_identifier` | DB を復元するスナップショットの名前。空なら DB を新規に作る | `""`（空） |
 
 #### (2) terraform init（state の保存先に接続する）
 
@@ -660,67 +665,110 @@ $ terraform -chdir=infra/terraform plan
 
 ---
 
-## 7. 費用・停止・再開・撤去
+## 7. 費用・休止・再開
+
+本プロジェクトでは、**使わない期間はすべてのリソースを撤去して（休止）、使うときに作り直す（再開）**（[インフラ設計書](infra-design.md) 2. 方針 8）。IaC で構成をすべてコードにしてあるので、何度消しても同じ環境を作り直せる。
 
 ### 7.1 費用の目安
 
-| 状態 | 月額の目安 | 内訳 |
+| 状態 | 費用の目安 | 内訳 |
 | --- | --- | --- |
-| 稼働中 | 約 $65〜75 | Fargate 約 $23、RDS 約 $21、ALB 約 $20、パブリック IPv4 約 $4、その他 約 $2 |
-| 停止中（7.2） | 約 $25 | ALB 約 $20、RDS のストレージ 約 $3、その他 |
-| 撤去後（7.4） | 約 $0 | state 用バケット（数 KB）のみ |
+| 稼働中 | **約 $0.1 / 時間**（30 日つけっぱなしなら約 $65〜75） | Fargate、RDS、ALB、パブリック IPv4 など。動いている時間に比例する |
+| 休止中 | **ほぼ $0**（月数セント） | DB のスナップショット（最新 2 つ）と、state 用バケット（数 KB）だけが残る |
 
-詳細は [インフラ設計書](infra-design.md) 11.。
+例えば 1 日 3 時間 × 月 20 日の利用なら、月 $6 前後になる。**使い終わったら必ず休止する。** 休止し忘れたときは、4.5 の予算アラート（$20）で気づける。詳細は [インフラ設計書](infra-design.md) 11.。
 
-### 7.2 一時的に停止する
-
-数日以上使わないときは、ECS タスクと RDS を止める。
+### 7.2 休止する
 
 ```bash
-# 1. ECS のタスクを 0 にする（terraform.tfvars の ecs_desired_count を 0 に書き換えてから）
-$ terraform -chdir=infra/terraform apply
-
-# 2. RDS を停止する
-$ aws rds stop-db-instance --db-instance-identifier taskmanagement
-$ aws rds wait db-instance-stopped --db-instance-identifier taskmanagement
+$ bash infra/scripts/shutdown.sh
 ```
 
-- タスク数は `aws ecs update-service` でも変えられるが、Terraform のコードと食い違う（ドリフト、2.2.6）ため、`terraform.tfvars` を変えて `apply` する。
-- RDS の停止・起動は Terraform で管理する設定ではないため、AWS CLI で行う。
-- **RDS は停止から 7 日たつと自動で起動する**（AWS の仕様）。長く使わない場合は 7.4 で撤去する方がよい。
-- 停止中は画面を開いても API がエラーになり、画面に接続エラーが表示される（FR-09）。
+スクリプトは次の順に処理する（15〜25 分）。CloudFront の削除に最も時間がかかる。
+
+1. RDS のスナップショットを日時入りの名前で取り、完成を待つ
+2. 最新の 2 つより古いスナップショットを消す
+3. `terraform destroy` を実行する（消すものの一覧が表示されるので、確認して `yes` を入力する）
+4. Terraform が管理するものが何も残っていないことを確認する
+
+中で実行しているコマンドは次のとおり。スクリプトが途中で止まったときは、これを 1 つずつ実行すればよい。
+
+```bash
+# 1. スナップショットを取る（名前の例：taskmanagement-20261011-2130）
+$ SNAPSHOT_ID="taskmanagement-$(date +%Y%m%d-%H%M)"
+$ aws rds create-db-snapshot \
+    --db-instance-identifier taskmanagement \
+    --db-snapshot-identifier "$SNAPSHOT_ID"
+$ aws rds wait db-snapshot-available --db-snapshot-identifier "$SNAPSHOT_ID"
+
+# 2. 手動スナップショットを古い順に表示し、最新の 2 つ以外を消す
+$ aws rds describe-db-snapshots \
+    --db-instance-identifier taskmanagement \
+    --snapshot-type manual \
+    --query 'sort_by(DBSnapshots, &SnapshotCreateTime)[].DBSnapshotIdentifier' \
+    --output text
+$ aws rds delete-db-snapshot --db-snapshot-identifier <古いスナップショットの名前>
+
+# 3. すべて撤去する
+$ terraform -chdir=infra/terraform destroy
+
+# 4. 何も残っていないことを確認する（何も表示されなければよい）
+$ terraform -chdir=infra/terraform state list
+```
+
+- **スナップショットが完成する前に `destroy` してはいけない。** 登録したカードが失われる。手順 1 の `wait` が正常に終わったことを必ず確認する。
+- `terraform state list` は「Terraform が管理しているリソースの一覧」を表示する。空なら、Terraform が作ったものはすべて消えている。
+- 休止中に画面の URL を開いても、CloudFront 自体が無いのでつながらない。
+- 休止しても消えないもの：DB のスナップショット、state 用バケット（5.）、予算アラート（4.5）。どれも Terraform の外で作ったか、Terraform の削除の対象外である。
 
 ### 7.3 再開する
 
 ```bash
-# 1. RDS を起動する（5〜10 分）
-$ aws rds start-db-instance --db-instance-identifier taskmanagement
-$ aws rds wait db-instance-available --db-instance-identifier taskmanagement
-
-# 2. ECS のタスクを 1 にする（terraform.tfvars の ecs_desired_count を 1 に戻してから）
-$ terraform -chdir=infra/terraform apply
+$ bash infra/scripts/startup.sh
 ```
 
-RDS が停止中のまま `terraform apply` で RDS の設定を変えようとすると失敗するため、必ず RDS を先に起動する。
+スクリプトは、6.1 の (3)〜(9) と同じことを一括で行う（20〜30 分）。
 
-### 7.4 完全に撤去する
+1. 最新のスナップショットを探し、`terraform.tfvars` の `db_snapshot_identifier` に書く（無ければ空にして、DB を新規に作る）
+2. ECR だけを先に作る（6.1 (3)。休止で ECR とイメージも消えているため）
+3. 今のコミットからイメージを作り、ECR に登録して、`backend_image_tag` を書き換える（6.1 (4)）
+4. `terraform plan` を表示し、確認のうえ `terraform apply` する
+5. ECS のタスクが起動するのを待つ（6.1 (7)）
+6. 画面をビルドして配置する（6.1 (8)）
+7. `/api/health/db` が 200 を返すことを確かめ、**新しい URL** を表示する
 
-**データベースの中身（登録したカード）もすべて消える。** 残したい場合は、先にスナップショット（DB の複製）を取る。
+- **再開するたびに URL が変わる**（[インフラ設計書](infra-design.md) 3.2）。表示された URL をブラウザで開く。
+- スナップショットから DB を復元するため、休止前に登録したカードがそのまま表示される。
+- 前提：state 用バケット（5.）があり、この PC で `terraform init`（6.1 (2)）を済ませていること。Docker Desktop が起動していること。
+
+### 7.4 アプリの利用をやめる（すべて片付ける）
+
+今後このアプリを使わない場合は、休止したうえで、Terraform の外に残っているものも消す。**消したあとは、データも含めて元に戻せない。**
 
 ```bash
-# （任意）スナップショットを取る。スナップショットは撤去後も残り、容量に応じて課金される
-$ aws rds create-db-snapshot \
-    --db-instance-identifier taskmanagement \
-    --db-snapshot-identifier "taskmanagement-$(date +%Y%m%d)"
-$ aws rds wait db-snapshot-available --db-snapshot-identifier "taskmanagement-$(date +%Y%m%d)"
+$ ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+$ STATE_BUCKET="taskmanagement-tfstate-${ACCOUNT_ID}"
 
-# 撤去する。plan と同じ形式で「消すもの」の一覧が出るので、確認して yes を入力する
-$ terraform -chdir=infra/terraform destroy
+# 1. 休止する（7.2。まだ休止していなければ）
+$ bash infra/scripts/shutdown.sh
+
+# 2. スナップショットをすべて消す
+$ aws rds describe-db-snapshots --db-instance-identifier taskmanagement --snapshot-type manual \
+    --query 'DBSnapshots[].DBSnapshotIdentifier' --output text
+$ aws rds delete-db-snapshot --db-snapshot-identifier <スナップショットの名前>   # 表示された数だけ繰り返す
+
+# 3. state 用バケットを空にして消す（バージョニングで残っている過去の版も消す）
+$ aws s3api delete-objects --bucket "$STATE_BUCKET" --delete "$(aws s3api list-object-versions \
+    --bucket "$STATE_BUCKET" \
+    --query '{Objects: [Versions, DeleteMarkers][].{Key: Key, VersionId: VersionId}}' \
+    --output json)"
+$ aws s3api delete-bucket --bucket "$STATE_BUCKET"
+
+# 4. 予算アラートを消す
+$ aws budgets delete-budget --account-id "$ACCOUNT_ID" --budget-name taskmanagement-monthly
 ```
 
-- 画面用の S3 バケットと ECR は、中身があっても消せるように設定してある（`force_destroy` / `force_delete`）。
-- state 用バケット（5.）は Terraform の管理外なので残る。もう使わない場合は、バケット内の全バージョンを消してから `aws s3api delete-bucket` で消す。
-- 再び使うときは、6.1 からやり直せば同じ構成ができる（IaC の利点）。
+再び使いたくなったときは、4.5・5.・6.1 からやり直せば同じ構成ができる（DB は空から始まる）。
 
 ### 7.5 費用の実績を確認する
 
@@ -747,9 +795,10 @@ Cost Explorer の API は 1 回の呼び出しごとに $0.01 かかる。頻繁
 | --- | --- |
 | Claude は作業の最初に `aws sts get-caller-identity` を実行し、アカウント ID と IAM ユーザーを報告する | 意図しないアカウントを操作するのを防ぐ |
 | `terraform apply` の前に、Claude は `plan` の要約（作成・変更・削除の件数と、削除・作り直しの対象）を示し、利用者の承認を得る | 2.2.5 の `-/+` などの危険な変更を人が確認する |
-| `terraform destroy`、`aws ... delete-*`、`aws rds stop-*` は、利用者が明示的に指示したときだけ実行する | 取り消せない操作であるため |
+| 休止（`shutdown.sh`）、`terraform destroy`、`aws ... delete-*` は、利用者が明示的に指示したときだけ実行する | 取り消せない操作であるため |
+| 休止では、スナップショットの完成（`wait` の正常終了）を確認してから `destroy` に進む | 登録したカードを失わないため |
 | Claude は `~/.aws/credentials` を読まず、アクセスキーを会話に出さない | 4.4 |
-| 作業の最後に、Claude は「今、何が動いていて、月額いくら程度かかる状態か」を報告する | 止め忘れによる課金を防ぐ |
+| 作業の最後に、Claude は「今、稼働中か休止中か」と、稼働中ならその旨（約 $0.1 / 時間かかり続けること）を報告する | 休止し忘れによる課金を防ぐ |
 
 これらは段階 3 で、Claude Code のスキル（`.claude/skills/deploy-aws/`）と、実行前に確認を求める設定（`.claude/settings.json` の `permissions.ask`）として仕組みにする。
 
@@ -773,7 +822,7 @@ $ MSYS_NO_PATHCONV=1 aws logs tail /ecs/taskmanagement-backend --follow --since 
 | --- | --- | --- |
 | `CannotPullContainerError` | ECR にそのタグのイメージが無い。またはタスクが外に出られない | `aws ecr list-images --repository-name taskmanagement-backend` でタグを確認。サブネットとパブリック IP の設定を確認 |
 | `ResourceInitializationError: unable to pull secrets` | Secrets Manager を読む権限が無い | タスク実行ロールのポリシー（`iam.tf`）を確認 |
-| ログに `Connection refused` / `timeout`（DB） | RDS が停止中、またはセキュリティグループ `rds` が `ecs` からの 5432 番を許可していない | `aws rds describe-db-instances --query 'DBInstances[0].DBInstanceStatus'` で `available` か確認 |
+| ログに `Connection refused` / `timeout`（DB） | RDS がまだ作成中・復元中、またはセキュリティグループ `rds` が `ecs` からの 5432 番を許可していない | `aws rds describe-db-instances --query 'DBInstances[0].DBInstanceStatus'` で `available` か確認 |
 | ログに `password authentication failed` | DB パスワードの食い違い | Terraform を経由せずにパスワードを変えていないか確認。`terraform apply` で揃え直す |
 | ログに `FlywayValidateException` | 適用済みのマイグレーションファイルを編集した | 適用済みのファイルは編集しない（[データ設計書](data-design.md) 10.3）。元に戻して新しい連番のファイルを追加する |
 | ログに `OutOfMemoryError` / 終了コード 137 | メモリ不足 | タスク定義のメモリを増やす（費用も上がる） |
@@ -816,6 +865,9 @@ $ aws elbv2 describe-target-health --target-group-arn "$TG_ARN" \
 | `Error acquiring the state lock` | 別の `terraform` が実行中か、前回の実行が途中で止まってロックが残っている | 本当に他で実行していないことを確かめてから `terraform -chdir=infra/terraform force-unlock <表示された Lock ID>` |
 | `Backend initialization required` | `init` していない、または backend の設定を変えた | 6.1 (2) の `init` を実行する |
 | `BucketAlreadyExists` | S3 のバケット名が世界のどこかで既に使われている | 名前にアカウント ID が入っているか確認する |
+| `You can't create this secret because a secret with this name is already scheduled for deletion` | 削除予定のシークレットが残っている（猶予期間 0 日の設定が効いていない） | `aws secretsmanager delete-secret --secret-id <シークレット名> --force-delete-without-recovery` で即時削除してから、もう一度 `apply` する |
+| `destroy` が `DependencyViolation` で失敗した | ECS や CloudFront が使っていたネットワークインターフェースの解放が、まだ終わっていない | 数分待ってから、もう一度 `terraform destroy` する。消し終わったものは state から外れているので、残りだけが消える |
+| `DBSnapshotNotFound`（再開時） | `db_snapshot_identifier` に書いたスナップショットが無い | `aws rds describe-db-snapshots --snapshot-type manual` で名前を確認する |
 | `apply` が途中で失敗した | 一部のリソースだけ作られた状態 | 慌てて消さない。原因を直してもう一度 `plan` → `apply` すれば、残りだけが作られる（state に作成済みのものが記録されているため） |
 
 ---
@@ -833,6 +885,7 @@ $ aws elbv2 describe-target-health --target-group-arn "$TG_ARN" \
 | バックエンドの更新 | `bash infra/scripts/deploy-backend.sh` |
 | 画面の更新 | `bash infra/scripts/deploy-frontend.sh` |
 | アプリのログ | `MSYS_NO_PATHCONV=1 aws logs tail /ecs/taskmanagement-backend --follow` |
-| 一時停止 | `ecs_desired_count = 0` にして `apply` → `aws rds stop-db-instance --db-instance-identifier taskmanagement` |
-| 再開 | `aws rds start-db-instance --db-instance-identifier taskmanagement` → `ecs_desired_count = 1` にして `apply` |
-| 完全撤去 | `terraform -chdir=infra/terraform destroy` |
+| 休止（スナップショット → すべて撤去） | `bash infra/scripts/shutdown.sh` |
+| 再開（作り直し → 新しい URL を表示） | `bash infra/scripts/startup.sh` |
+| Terraform が管理しているものの一覧 | `terraform -chdir=infra/terraform state list` |
+| スナップショットの一覧 | `aws rds describe-db-snapshots --snapshot-type manual --query 'DBSnapshots[].[DBSnapshotIdentifier,SnapshotCreateTime]' --output table` |
