@@ -5,13 +5,13 @@
 | 項目 | 内容 |
 | --- | --- |
 | 文書名 | タスク管理アプリ 技術スタック |
-| 版数 | 1.7 |
+| 版数 | 2.0 |
 | 作成日 | 2026-09-13 |
-| 最終更新日 | 2026-09-22 |
+| 最終更新日 | 2026-10-11 |
 | 作成者 | KeiT0773 |
 | ステータス | 確定 |
 | 上位文書 | [要件定義書](requirements.md) |
-| 関連文書 | [機能要件書](functional-requirements.md)、[画面要件書](screen-requirements.md)、[データ要件書](data-requirements.md) |
+| 関連文書 | [機能要件書](functional-requirements.md)、[画面要件書](screen-requirements.md)、[データ要件書](data-requirements.md)、[インフラ設計書](infra-design.md) |
 
 本書は、要件定義書 2.4 で「基本設計で決定する」とした、各層で使用する技術（プログラミング言語、フレームワーク、データベース製品、周辺ツール）を定義する。
 
@@ -27,6 +27,7 @@
 | 1.5 | 2026-09-21 | スタイルの行に、CSS Modules の提供元（Vite 同梱）、処理系、使用できる CSS 機能の基準（Vite の既定ターゲットと対応ブラウザ）を追記。CSS 自体に版数が無いことを明記 | KeiT0773 |
 | 1.6 | 2026-09-21 | ドラッグ&ドロップの導入に伴い、`@hello-pangea/dnd` のバージョン（18.0）、`react-beautiful-dnd` との関係、React 19・StrictMode への対応を追記 | KeiT0773 |
 | 1.7 | 2026-09-22 | 全体品質チェックの結果を反映。バックエンドに「コード検査」（Checkstyle + javac `-Xlint`）を追加。API 仕様書ツール（springdoc-openapi）は導入しない方針に改訂。フロントエンドの「コード検査・整形」に `react/exhaustive-deps`・`--deny-warnings`・改行コード LF 統一を追記 | KeiT0773 |
+| 2.0 | 2026-10-11 | サーバーの配置先を AWS に決定したことに伴い、9.「本番環境」（AWS のサービス、Terraform、AWS CLI、Docker イメージ）を追加。7. のリポジトリ構成に `infra/` を追加し、8. 保留事項から配置先の項目を除外 | KeiT0773 |
 
 ---
 
@@ -101,13 +102,30 @@ TaskManagement/
 ├── docs/        要件定義書・設計書
 ├── mock/        画面モック（要件確認用）
 ├── backend/     Spring Boot アプリケーション
-└── frontend/    React アプリケーション
+├── frontend/    React アプリケーション
+└── infra/       AWS の構成（Terraform）とデプロイ用スクリプト
 ```
 
 ---
 
 ## 8. 決定を保留する事項
 
-| 事項 | 保留理由 | 決定時期 |
+現時点で保留している事項は無い。サーバーの配置先（クラウドサービス等）は、ローカルでの実装完了後に AWS に決定した（9.）。
+
+---
+
+## 9. 本番環境
+
+[要件定義書](requirements.md) 決定事項 No.8 で「基本設計で決める」とした配置先。構成の詳細と選定理由は [インフラ設計書](infra-design.md)、構築の手順は [AWS デプロイ手順書](aws-deployment-guide.md) に記載する。
+
+| 項目 | 選定 | 役割・選定理由 |
 | --- | --- | --- |
-| サーバーの配置先（クラウドサービス等） | まずローカル環境で動作するものを完成させてから選定しても遅くない | ローカルでの実装完了後 |
+| クラウド | AWS（東京リージョン `ap-northeast-1`） | 利用者が日本にいる。資料が最も多く、既存の AWS アカウントと AWS CLI の設定がある |
+| 画面の配信 | Amazon CloudFront + Amazon S3 | `npm run build` で作った静的ファイルを HTTPS で配信する。`/api/*` だけをバックエンドへ振り分け、画面と API を同じドメインにする（開発時の Vite プロキシと同じ形で、CORS の設定が不要） |
+| バックエンドの実行 | Amazon ECS on AWS Fargate + Application Load Balancer（内部） | Spring Boot を Docker イメージにして動かす。サーバー（EC2）の OS 管理が不要 |
+| コンテナイメージの保管 | Amazon ECR | ECS が取得するイメージを置く |
+| データベース | Amazon RDS for PostgreSQL 16 系（`db.t4g.micro`） | ローカル（5.）と同じ PostgreSQL 16 系。インストール・パッチ・バックアップを AWS に任せる |
+| 秘密情報 | AWS Secrets Manager | DB パスワードを保管し、ECS タスクに環境変数として渡す |
+| IaC | Terraform 1.10 以上（確認時点 1.13.5）+ AWS プロバイダー | すべての AWS リソースをコードで定義する。AWS 専用の CloudFormation / CDK より資料が多く、他のクラウドにも使える。1.10 以上が必要なのは、S3 だけで state をロックする機能（`use_lockfile`）を使うため |
+| CLI | AWS CLI v2（確認時点 2.31.38） | 認証の確認、state 用バケットの作成、イメージの登録、画面の配置など、Terraform の外側の操作を行う |
+| コンテナ化 | Docker（6. の Docker Desktop） | バックエンドのイメージを作る。ローカルの PostgreSQL と同じ Docker Desktop を使う |
