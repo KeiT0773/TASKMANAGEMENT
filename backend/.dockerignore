@@ -1,0 +1,13 @@
+# docker build のときに、コンテナへ送らないファイル。
+# ビルドの結果や IDE の設定を送らないことで、ビルドを速くし、手元の古い成果物が混ざるのを防ぐ。
+build/
+.gradle/
+bin/
+out/
+.idea/
+.vscode/
+*.iml
+HELP.md
+README.md
+Dockerfile
+.dockerignore

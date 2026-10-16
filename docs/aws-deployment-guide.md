@@ -5,9 +5,9 @@
 | 項目 | 内容 |
 | --- | --- |
 | 文書名 | タスク管理アプリ AWS デプロイ手順書 |
-| 版数 | 1.1 |
+| 版数 | 1.2 |
 | 作成日 | 2026-10-11 |
-| 最終更新日 | 2026-10-11 |
+| 最終更新日 | 2026-10-17 |
 | 作成者 | KeiT0773 |
 | ステータス | 初版（実際のデプロイ後に、詰まった点を反映して改訂する） |
 | 上位文書 | [インフラ設計書](infra-design.md) |
@@ -23,6 +23,7 @@ AWS・Terraform・IaC に初めて触れる前提で、各手順の前に「何�
 | --- | --- | --- | --- |
 | 1.0 | 2026-10-11 | 初版作成。IaC・Terraform・AWS の基礎解説、AWS CLI の認証設定、state の置き場の準備、デプロイ・停止・撤去・トラブルシューティングの手順を記載 | KeiT0773 |
 | 1.1 | 2026-10-11 | 使わない期間はすべてのリソースを `terraform destroy` で撤去する運用（[インフラ設計書](infra-design.md) 1.1）に合わせ、7. を「費用・休止・再開」に書き直した（スナップショットによるデータの引き継ぎ、休止・再開のスクリプト、利用をやめるときの片付け）。4.5 の予算を $20 に変更。6.1 の変数、8.、9.、10. を対応させて更新 | KeiT0773 |
+| 1.2 | 2026-10-17 | 要件定義書 7.「費用」の追加（リソースを無料利用枠と同じ規模に制限）に合わせ、2.3.4 に Fargate Spot と SSM パラメータストアを追加して Secrets Manager を削除。7.1 の費用（約 $0.07 / 時間）、8.、9.1 を更新し、9.5 から Secrets Manager の削除予定のエラーを除外 | KeiT0773 |
 
 ### 1.2 本書のコマンドについて
 
@@ -195,8 +196,9 @@ Terraform で作ったリソースをコンソールで手作業で変えると�
 | ECR | Docker イメージの置き場（Docker Hub の AWS 版） | Spring Boot のイメージを置く |
 | ECS | コンテナを動かし続ける仕組み。「このイメージを常に 1 つ動かしておく」と指示すると、落ちても立て直す | Spring Boot のコンテナを動かす |
 | Fargate | ECS の起動方式の一つ。サーバー（EC2）を用意せず、コンテナだけを AWS に動かしてもらう | OS のパッチ当てなどの管理を不要にする |
+| Fargate Spot | Fargate のうち、AWS の空き容量を使う割安な方式（通常の約 3 割の料金）。空き容量が足りなくなると、2 分前の通知のあと中断されることがある | 費用を抑える（[インフラ設計書](infra-design.md) 2.1）。中断されても ECS が自動で起動し直す |
 | RDS | 管理付きのデータベース。インストール・パッチ・バックアップを AWS が行う | PostgreSQL を動かす |
-| Secrets Manager | パスワードなどの秘密情報の保管庫 | DB パスワードを保管し、ECS タスクに渡す |
+| SSM パラメータストア | 設定値や秘密情報を保管する場所。標準の範囲は無料で、`SecureString` を選ぶと暗号化して保管する | DB パスワードを保管し、ECS タスクに渡す。有料の Secrets Manager の代わりに使う |
 | CloudWatch Logs | ログの保管・閲覧 | Spring Boot のログを見る |
 | AWS Budgets | 費用の予算管理と通知 | 使いすぎをメールで知らせる |
 
@@ -673,10 +675,10 @@ $ terraform -chdir=infra/terraform plan
 
 | 状態 | 費用の目安 | 内訳 |
 | --- | --- | --- |
-| 稼働中 | **約 $0.1 / 時間**（30 日つけっぱなしなら約 $65〜75） | Fargate、RDS、ALB、パブリック IPv4 など。動いている時間に比例する |
+| 稼働中 | **約 $0.07 / 時間**（30 日つけっぱなしなら約 $50〜55） | RDS、ALB、Fargate Spot、パブリック IPv4 など。動いている時間に比例する。各リソースは無料利用枠と同じ規模に制限している（[インフラ設計書](infra-design.md) 2.1）が、このアカウントは無料利用枠の期間を過ぎているため課金される |
 | 休止中 | **ほぼ $0**（月数セント） | DB のスナップショット（最新 2 つ）と、state 用バケット（数 KB）だけが残る |
 
-例えば 1 日 3 時間 × 月 20 日の利用なら、月 $6 前後になる。**使い終わったら必ず休止する。** 休止し忘れたときは、4.5 の予算アラート（$20）で気づける。詳細は [インフラ設計書](infra-design.md) 11.。
+例えば 1 日 3 時間 × 月 20 日の利用なら、月 $4 前後になる。**使い終わったら必ず休止する。** 休止し忘れたときは、4.5 の予算アラート（$20）で気づける。詳細は [インフラ設計書](infra-design.md) 11.。
 
 ### 7.2 休止する
 
@@ -798,7 +800,7 @@ Cost Explorer の API は 1 回の呼び出しごとに $0.01 かかる。頻繁
 | 休止（`shutdown.sh`）、`terraform destroy`、`aws ... delete-*` は、利用者が明示的に指示したときだけ実行する | 取り消せない操作であるため |
 | 休止では、スナップショットの完成（`wait` の正常終了）を確認してから `destroy` に進む | 登録したカードを失わないため |
 | Claude は `~/.aws/credentials` を読まず、アクセスキーを会話に出さない | 4.4 |
-| 作業の最後に、Claude は「今、稼働中か休止中か」と、稼働中ならその旨（約 $0.1 / 時間かかり続けること）を報告する | 休止し忘れによる課金を防ぐ |
+| 作業の最後に、Claude は「今、稼働中か休止中か」と、稼働中ならその旨（約 $0.07 / 時間かかり続けること）を報告する | 休止し忘れによる課金を防ぐ |
 
 これらは段階 3 で、Claude Code のスキル（`.claude/skills/deploy-aws/`）と、実行前に確認を求める設定（`.claude/settings.json` の `permissions.ask`）として仕組みにする。
 
@@ -821,7 +823,8 @@ $ MSYS_NO_PATHCONV=1 aws logs tail /ecs/taskmanagement-backend --follow --since 
 | 症状 | 主な原因 | 対処 |
 | --- | --- | --- |
 | `CannotPullContainerError` | ECR にそのタグのイメージが無い。またはタスクが外に出られない | `aws ecr list-images --repository-name taskmanagement-backend` でタグを確認。サブネットとパブリック IP の設定を確認 |
-| `ResourceInitializationError: unable to pull secrets` | Secrets Manager を読む権限が無い | タスク実行ロールのポリシー（`iam.tf`）を確認 |
+| `ResourceInitializationError: unable to pull secrets` | SSM パラメータストアの DB パスワードを読む権限が無い、またはパラメータが無い | タスク実行ロールのポリシー（`iam.tf`）を確認。`aws ssm get-parameter --name <パラメータ名> --query Parameter.Name` でパラメータがあるか確認 |
+| `stoppedReason` が `Your Spot Task was interrupted.` | Fargate Spot の中断（AWS の空き容量が足りなくなった） | 正常な動きで、ECS サービスが自動で新しいタスクを起動する。数分待って `aws ecs wait services-stable` で確認する |
 | ログに `Connection refused` / `timeout`（DB） | RDS がまだ作成中・復元中、またはセキュリティグループ `rds` が `ecs` からの 5432 番を許可していない | `aws rds describe-db-instances --query 'DBInstances[0].DBInstanceStatus'` で `available` か確認 |
 | ログに `password authentication failed` | DB パスワードの食い違い | Terraform を経由せずにパスワードを変えていないか確認。`terraform apply` で揃え直す |
 | ログに `FlywayValidateException` | 適用済みのマイグレーションファイルを編集した | 適用済みのファイルは編集しない（[データ設計書](data-design.md) 10.3）。元に戻して新しい連番のファイルを追加する |
@@ -865,7 +868,6 @@ $ aws elbv2 describe-target-health --target-group-arn "$TG_ARN" \
 | `Error acquiring the state lock` | 別の `terraform` が実行中か、前回の実行が途中で止まってロックが残っている | 本当に他で実行していないことを確かめてから `terraform -chdir=infra/terraform force-unlock <表示された Lock ID>` |
 | `Backend initialization required` | `init` していない、または backend の設定を変えた | 6.1 (2) の `init` を実行する |
 | `BucketAlreadyExists` | S3 のバケット名が世界のどこかで既に使われている | 名前にアカウント ID が入っているか確認する |
-| `You can't create this secret because a secret with this name is already scheduled for deletion` | 削除予定のシークレットが残っている（猶予期間 0 日の設定が効いていない） | `aws secretsmanager delete-secret --secret-id <シークレット名> --force-delete-without-recovery` で即時削除してから、もう一度 `apply` する |
 | `destroy` が `DependencyViolation` で失敗した | ECS や CloudFront が使っていたネットワークインターフェースの解放が、まだ終わっていない | 数分待ってから、もう一度 `terraform destroy` する。消し終わったものは state から外れているので、残りだけが消える |
 | `DBSnapshotNotFound`（再開時） | `db_snapshot_identifier` に書いたスナップショットが無い | `aws rds describe-db-snapshots --snapshot-type manual` で名前を確認する |
 | `apply` が途中で失敗した | 一部のリソースだけ作られた状態 | 慌てて消さない。原因を直してもう一度 `plan` → `apply` すれば、残りだけが作られる（state に作成済みのものが記録されているため） |

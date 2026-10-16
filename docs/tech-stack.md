@@ -5,9 +5,9 @@
 | 項目 | 内容 |
 | --- | --- |
 | 文書名 | タスク管理アプリ 技術スタック |
-| 版数 | 2.0 |
+| 版数 | 2.1 |
 | 作成日 | 2026-09-13 |
-| 最終更新日 | 2026-10-11 |
+| 最終更新日 | 2026-10-17 |
 | 作成者 | KeiT0773 |
 | ステータス | 確定 |
 | 上位文書 | [要件定義書](requirements.md) |
@@ -28,6 +28,7 @@
 | 1.6 | 2026-09-21 | ドラッグ&ドロップの導入に伴い、`@hello-pangea/dnd` のバージョン（18.0）、`react-beautiful-dnd` との関係、React 19・StrictMode への対応を追記 | KeiT0773 |
 | 1.7 | 2026-09-22 | 全体品質チェックの結果を反映。バックエンドに「コード検査」（Checkstyle + javac `-Xlint`）を追加。API 仕様書ツール（springdoc-openapi）は導入しない方針に改訂。フロントエンドの「コード検査・整形」に `react/exhaustive-deps`・`--deny-warnings`・改行コード LF 統一を追記 | KeiT0773 |
 | 2.0 | 2026-10-11 | サーバーの配置先を AWS に決定したことに伴い、9.「本番環境」（AWS のサービス、Terraform、AWS CLI、Docker イメージ）を追加。7. のリポジトリ構成に `infra/` を追加し、8. 保留事項から配置先の項目を除外 | KeiT0773 |
+| 2.1 | 2026-10-17 | 要件定義書 7.「費用」の追加に伴い、9. のバックエンドの実行を Fargate Spot に、秘密情報を Secrets Manager から SSM パラメータストアに変更 | KeiT0773 |
 
 ---
 
@@ -122,10 +123,10 @@ TaskManagement/
 | --- | --- | --- |
 | クラウド | AWS（東京リージョン `ap-northeast-1`） | 利用者が日本にいる。資料が最も多く、既存の AWS アカウントと AWS CLI の設定がある |
 | 画面の配信 | Amazon CloudFront + Amazon S3 | `npm run build` で作った静的ファイルを HTTPS で配信する。`/api/*` だけをバックエンドへ振り分け、画面と API を同じドメインにする（開発時の Vite プロキシと同じ形で、CORS の設定が不要） |
-| バックエンドの実行 | Amazon ECS on AWS Fargate + Application Load Balancer（内部） | Spring Boot を Docker イメージにして動かす。サーバー（EC2）の OS 管理が不要 |
+| バックエンドの実行 | Amazon ECS on AWS Fargate（Fargate Spot）+ Application Load Balancer（内部） | Spring Boot を Docker イメージにして動かす。サーバー（EC2）の OS 管理が不要。費用を抑えるため、AWS の空き容量を使う Fargate Spot（約 7 割引）で動かす（[要件定義書](requirements.md) 7.「費用」） |
 | コンテナイメージの保管 | Amazon ECR | ECS が取得するイメージを置く |
 | データベース | Amazon RDS for PostgreSQL 16 系（`db.t4g.micro`） | ローカル（5.）と同じ PostgreSQL 16 系。インストール・パッチ・バックアップを AWS に任せる |
-| 秘密情報 | AWS Secrets Manager | DB パスワードを保管し、ECS タスクに環境変数として渡す |
+| 秘密情報 | AWS Systems Manager パラメータストア（標準パラメータ、`SecureString`） | DB パスワードを暗号化して保管し、ECS タスクに環境変数として渡す。標準パラメータは無料で、有料の Secrets Manager と同じように ECS から読める |
 | IaC | Terraform 1.10 以上（確認時点 1.13.5）+ AWS プロバイダー | すべての AWS リソースをコードで定義する。AWS 専用の CloudFormation / CDK より資料が多く、他のクラウドにも使える。1.10 以上が必要なのは、S3 だけで state をロックする機能（`use_lockfile`）を使うため |
 | CLI | AWS CLI v2（確認時点 2.31.38） | 認証の確認、state 用バケットの作成、イメージの登録、画面の配置など、Terraform の外側の操作を行う |
 | コンテナ化 | Docker（6. の Docker Desktop） | バックエンドのイメージを作る。ローカルの PostgreSQL と同じ Docker Desktop を使う |

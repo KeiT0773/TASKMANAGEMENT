@@ -73,9 +73,9 @@ taskkill //PID <PID> //F                        # そのプロセスを停止（
 | 設定ファイル | `src/main/resources/application.properties` |
 | DB 側の定義 | リポジトリ直下の `compose.yaml` |
 
-接続情報はローカル開発専用のため、そのままリポジトリに含めている。サーバーへ配置する際は環境変数などに切り替える（技術スタック 8. 決定を保留する事項）。
+接続情報はローカル開発専用のため、そのままリポジトリに含めている。本番環境（AWS）では、接続先・ユーザー名・パスワードを環境変数（`SPRING_DATASOURCE_URL` / `_USERNAME` / `_PASSWORD`）で上書きする（下の「本番用のコンテナイメージ」、[インフラ設計書](../docs/infra-design.md) 7.2）。
 
-テーブルの作成・変更は **Flyway だけが行う**（`spring.jpa.hibernate.ddl-auto=none`）。SQL ファイルは `src/main/resources/db/migration/` に `V1__xxx.sql` の形式で置き、アプリ起動時に自動で適用される。
+テーブルの作成・変更は **Flyway だけが行う**（`spring.jpa.hibernate.ddl-auto=none`）。SQL ファイルは `src/main/resources/db/migration/` に `V1__xxx.sql` の形式で置き、アプリ起動時に自動で適用される。開発用のサンプルデータだけは `src/main/resources/db/sample/` に置き、本番では適用しない（[データ設計書](../docs/data-design.md) 10.4）。
 
 > `./gradlew check` に含まれる起動確認テストも DB へ接続するため、テスト実行前にも `docker compose up -d` が必要。
 
@@ -88,10 +88,29 @@ taskkill //PID <PID> //F                        # そのプロセスを停止（
 | Checkstyle | `config/checkstyle/checkstyle.xml` のルール（未使用 import、波括弧の省略など）。結果は `build/reports/checkstyle/main.html` / `test.html` | `./gradlew checkstyleMain checkstyleTest` |
 | javac `-Xlint:all -Werror` | コンパイラの警告をすべて有効にし、警告があれば失敗にする（`build.gradle`） | `./gradlew compileJava compileTestJava` |
 
+## 本番用のコンテナイメージ
+
+AWS の ECS Fargate で動かすためのイメージを `Dockerfile` で作る（[インフラ設計書](../docs/infra-design.md) 7.）。AWS への登録と配置の手順は [AWS デプロイ手順書](../docs/aws-deployment-guide.md) 6. を参照。
+
+```bash
+# Git Bash（リポジトリルートで実行）。先に ./gradlew check を通しておく（イメージの作成ではテストを実行しない）
+docker build -t taskmanagement-backend backend
+```
+
+| 項目 | 内容 |
+| --- | --- |
+| 作り方 | マルチステージビルド。`eclipse-temurin:21-jdk` で `bootJar` を作り、`eclipse-temurin:21-jre` に jar だけを入れる |
+| 実行ユーザー | `app`（UID 10001）。root では動かさない |
+| ポート | 8080 |
+| プロファイル | 環境変数 `SPRING_PROFILES_ACTIVE=prod` で `application-prod.properties` を有効にする。`db/sample` を読まず、SQL のログを出さない |
+| DB 接続 | 環境変数 `SPRING_DATASOURCE_URL` / `SPRING_DATASOURCE_USERNAME` / `SPRING_DATASOURCE_PASSWORD` で渡す |
+
 ## 構成
 
 ```
 backend/
+├── Dockerfile                   本番用のコンテナイメージの作り方
+├── .dockerignore                イメージの作成時にコンテナへ送らないファイル
 ├── build.gradle                 依存ライブラリとビルド設定（Checkstyle、javac -Xlint の設定を含む）
 ├── config/checkstyle/           Checkstyle のルール
 ├── settings.gradle              プロジェクト名
@@ -105,8 +124,10 @@ backend/
     │   │   ├── card/                     カード（Card: エンティティ、Repository、Service、Request/Response、Controller、例外）
     │   │   └── common/                   GlobalExceptionHandler（例外・入力チェック違反 → ProblemDetail）
     │   └── resources/
-    │       ├── application.properties    アプリ設定（DB 接続設定を含む）
-    │       └── db/migration/             Flyway のマイグレーション SQL（V1: テーブル定義、V2: リスト初期データ、V3: サンプルカード）
+    │       ├── application.properties    アプリ設定（ローカル用の DB 接続設定を含む）
+    │       ├── application-prod.properties  本番（prod プロファイル）で上書きする設定
+    │       ├── db/migration/             Flyway のマイグレーション SQL（V1: テーブル定義、V2: リスト初期データ）
+    │       └── db/sample/                開発用のサンプルデータ（V3: サンプルカード）。本番では適用しない
     └── test/
         └── java/com/taskmanagement/backend/
             ├── BackendApplicationTests.java  起動確認テスト
@@ -119,7 +140,7 @@ backend/
 - `db/migration/` に次の 2 ファイルを置き、起動時に Flyway が `lists` / `cards` テーブルとリストの初期データ 3 件（todo / doing / done）を作成する。定義の根拠は [データ設計書](../docs/data-design.md) 4.〜7. を参照。
   - `V1__create_list_and_card_tables.sql` — テーブル定義、制約、索引
   - `V2__insert_initial_lists.sql` — リストの初期データ
-- `V3__insert_sample_cards.sql` で画面モックと同じサンプルカード 6 件を投入する（開発用。データ設計書 7.）。
+- `db/sample/V3__insert_sample_cards.sql` で画面モックと同じサンプルカード 6 件を投入する（開発用。データ設計書 7.。本番の `prod` プロファイルでは適用しない。データ設計書 10.4）。
 - カード・リストの取得 API（`GET /api/lists`、`GET /api/cards`、`GET /api/cards/{id}`）、カードの登録 API（`POST /api/cards`）、編集 API（`PUT /api/cards/{id}`）、移動・並べ替え API（`PUT /api/cards/{id}/position`）、全リストの優先度順並べ替え API（`POST /api/cards/sort`）を実装済み。仕様は [API 設計書](../docs/api-design.md) を参照。登録時と、編集で優先度を変えたときは、そのリスト内が優先度順（高 → 中 → 低）に並べ直される。移動・並べ替えでは並べ直さず、指定した位置にそのまま置く。全リストの並べ替えは 3 リストを 1 トランザクションで並べ直す。
 - カードの削除 API（`DELETE /api/cards/{id}`）を実装済み。物理削除し、そのリストに残ったカードの `displayOrder` を 0 から詰める（優先度順には並べ直さない）。これで FR-01〜FR-10 に必要な API（8 本）がすべて揃った。
 
