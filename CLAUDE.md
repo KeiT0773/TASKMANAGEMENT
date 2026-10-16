@@ -20,10 +20,10 @@ Trello 方式の個人用タスク管理アプリ。Web アプリケーション
 | [フロントエンド設計書](docs/frontend-design.md) | コンポーネント構成、状態の持ち方、API 呼び出しの方針、表示ルール |
 | [技術スタック](docs/tech-stack.md) | 各層で使用する言語・フレームワーク・周辺ツールの選定と理由 |
 | [インフラ設計書](docs/infra-design.md) | AWS 上の構成（CloudFront + S3 / ECS Fargate / RDS）、ネットワーク、秘密情報、費用、Terraform の構成 |
-| [AWS デプロイ手順書](docs/aws-deployment-guide.md) | AWS・Terraform・IaC の解説、AWS CLI の認証設定、構築・更新・停止・撤去の手順 |
+| [AWS デプロイ手順書](docs/aws-deployment-guide.md) | AWS・Terraform・IaC の解説、AWS CLI の認証設定、構築・更新・休止・再開の手順 |
 | [開発フロー](docs/development-workflow.md) | Issue・ブランチ・PR の運用ルール |
 
-構成は `docs/`（要件定義書・設計書）、`mock/`（画面モック）、`backend/`（Spring Boot）、`frontend/`（React + Vite）、`compose.yaml`（ローカル開発用 PostgreSQL）。
+構成は `docs/`（要件定義書・設計書）、`mock/`（画面モック）、`backend/`（Spring Boot）、`frontend/`（React + Vite）、`infra/`（AWS の構成の Terraform とデプロイ用スクリプト）、`compose.yaml`（ローカル開発用 PostgreSQL）。
 
 ---
 
@@ -193,3 +193,14 @@ npm run dev
 ## 7. 品質チェック・レビュー
 
 実装の品質チェックやレビューを行うとき、および PR を作る前のセルフレビューは、スキル `quality-review`（[.claude/skills/quality-review/SKILL.md](.claude/skills/quality-review/SKILL.md)）に従う。機械チェック（`cd frontend && npm run check`、`cd backend && ./gradlew check`）→ 文書との突き合わせ → 標準からのずれ、の順で確認し、文書と実装が食い違っていれば文書を正として実装を直す。
+
+---
+
+## 8. AWS へのデプロイ
+
+AWS への構築・更新・休止・再開と、`infra/` の Terraform・スクリプトの実行は、スキル `deploy-aws`（[.claude/skills/deploy-aws/SKILL.md](.claude/skills/deploy-aws/SKILL.md)）に従う。
+
+- AWS の実物を変える操作は、内容（計画の集計など）を示して利用者の承認を得てから行う。スクリプトの `--yes` は承認後にだけ付ける
+- `~/.aws/credentials` を読まない。アクセスキーを会話に出さない
+- 作業の最後に、稼働中か休止中かを報告する（稼働中は約 $0.07 / 時間かかる。[インフラ設計書](docs/infra-design.md) 11.）
+- リソースの規模は [インフラ設計書](docs/infra-design.md) 2.1 の上限（無料利用枠と同じ規模）を超えない

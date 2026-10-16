@@ -5,7 +5,7 @@
 | 項目 | 内容 |
 | --- | --- |
 | 文書名 | タスク管理アプリ インフラ設計書 |
-| 版数 | 1.3 |
+| 版数 | 1.4 |
 | 作成日 | 2026-10-11 |
 | 最終更新日 | 2026-10-17 |
 | 作成者 | KeiT0773 |
@@ -35,6 +35,7 @@
 | 1.1 | 2026-10-11 | 使わない期間の費用をほぼゼロにするため、「休止時はすべてのリソースを `terraform destroy` で撤去し、再開時に作り直す」運用に変更。2. 方針 8、3.2、8.1（スナップショットによるデータの引き継ぎ）、9.1（シークレットの即時削除）、11. 費用見積もり、12.1 のスクリプト、決定事項 No.10〜12、14. を追加・更新。予算を $80 から $20 に変更 | KeiT0773 |
 | 1.2 | 2026-10-17 | `backend/Dockerfile` の作成に合わせ、7.1 にイメージの作り方（ベースイメージ、実行ユーザー、Java のメモリ上限）を追記 | KeiT0773 |
 | 1.3 | 2026-10-17 | 要件定義書 7.「費用」の追加に伴い、各リソースを無料利用枠と同じ規模に制限する 2. 方針 9 と 2.1 を追加。ECS を Fargate Spot に、DB パスワードの保管先を Secrets Manager から SSM パラメータストア（無料）に変更。RDS のストレージ自動拡張・監視の無効化を明記。11. 費用見積もり（約 $0.1 → 約 $0.07 / 時間）、10.、決定事項 No.7・12〜14 を更新 | KeiT0773 |
+| 1.4 | 2026-10-17 | Terraform のコードとスクリプトの作成に合わせて更新。7.2 の接続先に `sslmode=require` とその理由を追記。12.1 に `lib.sh` と `.gitignore`、12.2 にプロバイダーの実際の版を追記。12.3「スクリプトの安全装置」を追加し、旧 12.3 を 12.4 に繰り下げ | KeiT0773 |
 
 ---
 
@@ -258,7 +259,7 @@ Spring Boot は、環境変数 `SPRING_DATASOURCE_URL` を `spring.datasource.ur
 | 環境変数 | 値 | 渡し方 |
 | --- | --- | --- |
 | `SPRING_PROFILES_ACTIVE` | `prod` | タスク定義に直接書く |
-| `SPRING_DATASOURCE_URL` | `jdbc:postgresql://<RDS のエンドポイント>:5432/taskmanagement` | Terraform が RDS の作成結果から組み立てる |
+| `SPRING_DATASOURCE_URL` | `jdbc:postgresql://<RDS のエンドポイント>:5432/taskmanagement?sslmode=require` | Terraform が RDS の作成結果から組み立てる。RDS for PostgreSQL 16 は暗号化しない接続を既定で拒否する（パラメータ `rds.force_ssl = 1`）ため、`sslmode=require` で暗号化して接続する |
 | `SPRING_DATASOURCE_USERNAME` | `taskmanagement` | タスク定義に直接書く |
 | `SPRING_DATASOURCE_PASSWORD` | （秘密） | SSM パラメータストアから注入する（9.） |
 
@@ -413,7 +414,9 @@ TaskManagement/
     │   ├── frontend.tf             画面用 S3、CloudFront
     │   ├── outputs.tf              URL などの出力値
     │   └── .terraform.lock.hcl     プロバイダーのバージョンの固定（コミットする）
+    ├── .gitignore                  .terraform/、*.tfstate、実物の *.tfvars、保存した計画を Git に含めない
     └── scripts/
+        ├── lib.sh                  各スクリプトが共通で使う関数（確認、init、計画の検査など）
         ├── deploy-backend.sh       イメージの作成 → ECR へ登録 → ECS を更新
         ├── deploy-frontend.sh      画面のビルド → S3 へ配置 → キャッシュの無効化
         ├── shutdown.sh             休止：スナップショット → 古いスナップショットの削除 → terraform destroy
@@ -428,11 +431,25 @@ TaskManagement/
 | 項目 | 値 | 理由 |
 | --- | --- | --- |
 | Terraform | 1.10 以上 | S3 だけで state のロックができる機能（`use_lockfile`）が 1.10 で入ったため |
-| AWS プロバイダー | 実装時点の最新メジャー版に固定（例：`~> 6.0`） | メジャー版の更新では書き方が変わることがあるため、意図せず上がらないようにする |
+| AWS プロバイダー | `~> 6.0`（作成時点 6.69.1。実際の版は `.terraform.lock.hcl` で固定） | メジャー版の更新では書き方が変わることがあるため、意図せず上がらないようにする |
+| random プロバイダー | `~> 3.6`（作成時点 3.9.1） | DB パスワードの生成（9.1） |
 | リージョン | `ap-northeast-1`（東京） | 利用者が日本にいる。既存の AWS CLI の設定とも同じ |
 | 共通タグ | `Project = taskmanagement`、`ManagedBy = terraform` | 費用の内訳を絞り込んだり、Terraform 管理外のリソースと区別したりするため |
 
-### 12.3 state の保存先
+### 12.3 スクリプトの安全装置
+
+`infra/scripts/` のスクリプトは、AWS の実物を変える前に次の確認を行う。
+
+| 安全装置 | 内容 | 対象 |
+| --- | --- | --- |
+| 実行前の確認 | 作成・撤去する件数を表示し、`[y/N]` で確認を求める。`--yes` で省略できる。端末から入力できないときは、確認の手前で止まる | startup・shutdown・deploy-backend |
+| 削除・作り直しの検査 | 保存した計画（`plan -out`）に削除・作り直し（`-/+`）が含まれていれば、適用せずに中止する。バックエンドの更新では、タスク定義の作り直しだけを許可する | startup・deploy-backend |
+| スナップショットの完成の確認 | スナップショットが完成しなければ、何も撤去せずに中止する | shutdown |
+| 未コミットの変更の検査 | `backend/` にコミットしていない変更があれば、イメージを作らずに中止する（タグと中身を一致させるため） | startup・deploy-backend |
+| 規模の上限 | `db_instance_class` は `db.t4g.micro` / `db.t3.micro` 以外を受け付けない（`variables.tf` の validation）。ECS の CPU・メモリは変数にせず固定する | Terraform |
+| DB の作り直しの防止 | 稼働中に `db_snapshot_identifier` が変わっても、DB を作り直さない（`rds.tf` の `ignore_changes`） | Terraform |
+
+### 12.4 state の保存先
 
 | 項目 | 値 |
 | --- | --- |
