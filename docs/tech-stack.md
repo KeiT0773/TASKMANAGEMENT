@@ -5,7 +5,7 @@
 | 項目 | 内容 |
 | --- | --- |
 | 文書名 | タスク管理アプリ 技術スタック |
-| 版数 | 2.2 |
+| 版数 | 2.3 |
 | 作成日 | 2026-09-13 |
 | 最終更新日 | 2026-10-17 |
 | 作成者 | KeiT0773 |
@@ -30,6 +30,7 @@
 | 2.0 | 2026-10-11 | サーバーの配置先を AWS に決定したことに伴い、9.「本番環境」（AWS のサービス、Terraform、AWS CLI、Docker イメージ）を追加。7. のリポジトリ構成に `infra/` を追加し、8. 保留事項から配置先の項目を除外 | KeiT0773 |
 | 2.1 | 2026-10-17 | 要件定義書 7.「費用」の追加に伴い、9. のバックエンドの実行を Fargate Spot に、秘密情報を Secrets Manager から SSM パラメータストアに変更 | KeiT0773 |
 | 2.2 | 2026-10-17 | Terraform のコードの作成に合わせ、9. の IaC の行にプロバイダーの版を追記 | KeiT0773 |
+| 2.3 | 2026-10-17 | 要件定義書 7.「アクセス制御」の変更に合わせ、9. に「アクセス元の制限：CloudFront Functions」を追加 | KeiT0773 |
 
 ---
 
@@ -130,4 +131,5 @@ TaskManagement/
 | 秘密情報 | AWS Systems Manager パラメータストア（標準パラメータ、`SecureString`） | DB パスワードを暗号化して保管し、ECS タスクに環境変数として渡す。標準パラメータは無料で、有料の Secrets Manager と同じように ECS から読める |
 | IaC | Terraform 1.10 以上（確認時点 1.13.5）+ AWS プロバイダー 6 系（作成時点 6.69.1）+ random プロバイダー 3 系（同 3.9.1） | すべての AWS リソースをコードで定義する。AWS 専用の CloudFormation / CDK より資料が多く、他のクラウドにも使える。1.10 以上が必要なのは、S3 だけで state をロックする機能（`use_lockfile`）を使うため |
 | CLI | AWS CLI v2（確認時点 2.31.38） | 認証の確認、state 用バケットの作成、イメージの登録、画面の配置など、Terraform の外側の操作を行う |
+| アクセス元の制限 | Amazon CloudFront Functions（cloudfront-js-2.0） | 要求ごとに CloudFront で動く短い JavaScript で、アクセス元の IP アドレスが自宅のネットワーク以外なら 403 を返す（[要件定義書](requirements.md) 7.「アクセス制御」）。月 200 万回まで無料。同じことができる AWS WAF は月 $6 前後かかるため使わない |
 | コンテナ化 | Docker（6. の Docker Desktop） | バックエンドのイメージを作る。ローカルの PostgreSQL と同じ Docker Desktop を使う |
