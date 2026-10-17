@@ -5,7 +5,7 @@
 | 項目 | 内容 |
 | --- | --- |
 | 文書名 | タスク管理アプリ AWS デプロイ手順書 |
-| 版数 | 1.2 |
+| 版数 | 1.3 |
 | 作成日 | 2026-10-11 |
 | 最終更新日 | 2026-10-17 |
 | 作成者 | KeiT0773 |
@@ -24,12 +24,14 @@ AWS・Terraform・IaC に初めて触れる前提で、各手順の前に「何�
 | 1.0 | 2026-10-11 | 初版作成。IaC・Terraform・AWS の基礎解説、AWS CLI の認証設定、state の置き場の準備、デプロイ・停止・撤去・トラブルシューティングの手順を記載 | KeiT0773 |
 | 1.1 | 2026-10-11 | 使わない期間はすべてのリソースを `terraform destroy` で撤去する運用（[インフラ設計書](infra-design.md) 1.1）に合わせ、7. を「費用・休止・再開」に書き直した（スナップショットによるデータの引き継ぎ、休止・再開のスクリプト、利用をやめるときの片付け）。4.5 の予算を $20 に変更。6.1 の変数、8.、9.、10. を対応させて更新 | KeiT0773 |
 | 1.2 | 2026-10-17 | 要件定義書 7.「費用」の追加（リソースを無料利用枠と同じ規模に制限）に合わせ、2.3.4 に Fargate Spot と SSM パラメータストアを追加して Secrets Manager を削除。7.1 の費用（約 $0.07 / 時間）、8.、9.1 を更新し、9.5 から Secrets Manager の削除予定のエラーを除外 | KeiT0773 |
+| 1.3 | 2026-10-17 | Terraform のコードとスクリプトの作成に合わせて更新。1.2 にスクリプトの確認と `--yes` を追記。6.1 (4) の ECR のアドレスを AWS CLI で読む形に修正し、(5) の件数を実際の値（43 件）に。7.2・7.3 の手順を実装の順序に合わせ、8. にスキルと `permissions.ask` を明記。9.1 に暗号化しない接続のエラーを追加 | KeiT0773 |
 
 ### 1.2 本書のコマンドについて
 
 - コマンドはすべて **Git Bash** 向けに書いている（Cursor のターミナルパネルで Git Bash を使う前提）。PowerShell ではそのまま動かない。
 - 先頭が `$` の行はコマンドの入力例、そうでない行は出力例である。`$` 自体は入力しない。
 - `<...>` の部分は自分の値に置き換える。
+- `infra/scripts/` のスクリプトは、AWS の実物を変える前に必ず確認（`[y/N]`）を求める。確認済みの内容をもう一度実行するときは `--yes` を付けると確認を省略できる。端末から入力できない環境（Claude など）で `--yes` なしに実行すると、確認の手前で止まる（8.）。
 
 > **Git Bash の注意（パスの自動変換）**
 > Git Bash は、`/` で始まる引数を Windows のパス（`C:/Program Files/Git/...`）に書き換えてしまう。CloudFront のパス指定（`"/*"`）や CloudWatch Logs のロググループ名（`/ecs/...`）を渡すときは、コマンドの先頭に `MSYS_NO_PATHCONV=1` を付けて、この書き換えを止める。本書では必要な箇所に付けてある。
@@ -488,7 +490,7 @@ $ aws s3api get-public-access-block --bucket "$STATE_BUCKET"
 
 ### 6.1 初回デプロイ
 
-ここでは仕組みを理解するため、1 段ずつ手で実行する。2 回目以降（休止からの再開）は、同じことを 7.3 のスクリプトで一括して行う。
+ここでは仕組みを理解するため、1 段ずつ手で実行する。同じことは 7.3 の `startup.sh` で一括しても行える（初回でも使える）。2 回目以降（休止からの再開）は `startup.sh` を使う。
 
 #### 前提
 
@@ -534,7 +536,8 @@ $ terraform -chdir=infra/terraform apply -target=aws_ecr_repository.backend
 ```bash
 # イメージのタグ = 今のコミットの短縮ハッシュ
 $ TAG=$(git rev-parse --short HEAD)
-$ ECR_URL=$(terraform -chdir=infra/terraform output -raw ecr_repository_url)
+$ ECR_URL=$(aws ecr describe-repositories --repository-names taskmanagement-backend \
+    --query 'repositories[0].repositoryUri' --output text)
 
 # ECR にログインする（Docker に、ECR へのアップロード用の一時パスワードを渡す）
 $ aws ecr get-login-password --region ap-northeast-1 \
@@ -547,6 +550,7 @@ $ docker build -t "${ECR_URL}:${TAG}" backend
 $ docker push "${ECR_URL}:${TAG}"
 ```
 
+- ECR のアドレスは `terraform output` ではなく AWS CLI で読む。(3) で ECR だけを先に作った直後は、ほかのリソースがまだ無いため、`terraform output` に値が入らないことがあるためである。
 - `${ECR_URL%%/*}` は「`ECR_URL` の最初の `/` より前」を取り出す Bash の書き方で、レジストリのホスト名（`<アカウント ID>.dkr.ecr.ap-northeast-1.amazonaws.com`）になる。
 - `infra/terraform/terraform.tfvars` の `backend_image_tag` に、`$TAG` の値（`echo "$TAG"` で表示）を書く。
 
@@ -556,7 +560,7 @@ $ docker push "${ECR_URL}:${TAG}"
 $ terraform -chdir=infra/terraform plan -out=tfplan
 ```
 
-`-out=tfplan` は計画をファイルに保存する指定で、次の `apply` で **確認した計画と全く同じ内容** を実行できる。初回は 40 前後のリソースが `+`（作成）になり、`to change` と `to destroy` は 0 のはずである。
+`-out=tfplan` は計画をファイルに保存する指定で、次の `apply` で **確認した計画と全く同じ内容** を実行できる。初回は `Plan: 43 to add, 0 to change, 0 to destroy.`（ECR を (3) で作った後なので 41 前後）になる。`to change` と `to destroy` は 0 のはずである。
 
 #### (6) apply で構築する
 
@@ -688,10 +692,11 @@ $ bash infra/scripts/shutdown.sh
 
 スクリプトは次の順に処理する（15〜25 分）。CloudFront の削除に最も時間がかかる。
 
-1. RDS のスナップショットを日時入りの名前で取り、完成を待つ
-2. 最新の 2 つより古いスナップショットを消す
-3. `terraform destroy` を実行する（消すものの一覧が表示されるので、確認して `yes` を入力する）
-4. Terraform が管理するものが何も残っていないことを確認する
+1. `terraform plan -destroy` で撤去するものの件数を表示し、確認を求める（`y` で続行）
+2. RDS のスナップショットを日時入りの名前で取り、完成を待つ（完成しなければ何も消さずに中止する）
+3. 最新の 2 つより古いスナップショットを消す
+4. 1. で確認した計画のとおりに撤去する
+5. Terraform が管理するものが何も残っていないことを確認する
 
 中で実行しているコマンドは次のとおり。スクリプトが途中で止まったときは、これを 1 つずつ実行すればよい。
 
@@ -732,16 +737,18 @@ $ bash infra/scripts/startup.sh
 スクリプトは、6.1 の (3)〜(9) と同じことを一括で行う（20〜30 分）。
 
 1. 最新のスナップショットを探し、`terraform.tfvars` の `db_snapshot_identifier` に書く（無ければ空にして、DB を新規に作る）
-2. ECR だけを先に作る（6.1 (3)。休止で ECR とイメージも消えているため）
-3. 今のコミットからイメージを作り、ECR に登録して、`backend_image_tag` を書き換える（6.1 (4)）
-4. `terraform plan` を表示し、確認のうえ `terraform apply` する
-5. ECS のタスクが起動するのを待つ（6.1 (7)）
-6. 画面をビルドして配置する（6.1 (8)）
-7. `/api/health/db` が 200 を返すことを確かめ、**新しい URL** を表示する
+2. 作成されるリソースの件数を表示し、確認を求める（`y` で続行。ここから課金が始まる）
+3. ECR だけを先に作る（6.1 (3)。休止で ECR とイメージも消えているため）
+4. 今のコミットからイメージを作り、ECR に登録して、`backend_image_tag` を書き換える（6.1 (4)）
+5. `terraform plan` → `terraform apply`。計画に削除・作り直しが含まれていたら中止する
+6. ECS のタスクが起動するのを待つ（6.1 (7)）
+7. 画面をビルドして配置する（6.1 (8)）
+8. `/api/health/db` が 200 を返すことを確かめ、**新しい URL** を表示する
 
 - **再開するたびに URL が変わる**（[インフラ設計書](infra-design.md) 3.2）。表示された URL をブラウザで開く。
 - スナップショットから DB を復元するため、休止前に登録したカードがそのまま表示される。
-- 前提：state 用バケット（5.）があり、この PC で `terraform init`（6.1 (2)）を済ませていること。Docker Desktop が起動していること。
+- 前提：state 用バケット（5.）があり、Docker Desktop が起動していること。`terraform init`（6.1 (2)）が済んでいなければ、スクリプトが自動で行う。
+- `backend/` にコミットしていない変更があると止まる。イメージのタグ（コミットハッシュ）と中身を一致させるためである。
 
 ### 7.4 アプリの利用をやめる（すべて片付ける）
 
@@ -802,7 +809,7 @@ Cost Explorer の API は 1 回の呼び出しごとに $0.01 かかる。頻繁
 | Claude は `~/.aws/credentials` を読まず、アクセスキーを会話に出さない | 4.4 |
 | 作業の最後に、Claude は「今、稼働中か休止中か」と、稼働中ならその旨（約 $0.07 / 時間かかり続けること）を報告する | 休止し忘れによる課金を防ぐ |
 
-これらは段階 3 で、Claude Code のスキル（`.claude/skills/deploy-aws/`）と、実行前に確認を求める設定（`.claude/settings.json` の `permissions.ask`）として仕組みにする。
+これらは、Claude Code のスキル（[.claude/skills/deploy-aws/SKILL.md](../.claude/skills/deploy-aws/SKILL.md)）と、実行前に確認を求める設定（`.claude/settings.json` の `permissions.ask`。`terraform apply` / `destroy`、`infra/scripts/` のスクリプト、`aws ... create-*` / `delete-*` などが対象）で仕組みにしている。Claude はスクリプトを 1 回目は `--yes` なしで実行して内容を示し、承認を得てから `--yes` 付きで実行する。
 
 ---
 
@@ -826,6 +833,7 @@ $ MSYS_NO_PATHCONV=1 aws logs tail /ecs/taskmanagement-backend --follow --since 
 | `ResourceInitializationError: unable to pull secrets` | SSM パラメータストアの DB パスワードを読む権限が無い、またはパラメータが無い | タスク実行ロールのポリシー（`iam.tf`）を確認。`aws ssm get-parameter --name <パラメータ名> --query Parameter.Name` でパラメータがあるか確認 |
 | `stoppedReason` が `Your Spot Task was interrupted.` | Fargate Spot の中断（AWS の空き容量が足りなくなった） | 正常な動きで、ECS サービスが自動で新しいタスクを起動する。数分待って `aws ecs wait services-stable` で確認する |
 | ログに `Connection refused` / `timeout`（DB） | RDS がまだ作成中・復元中、またはセキュリティグループ `rds` が `ecs` からの 5432 番を許可していない | `aws rds describe-db-instances --query 'DBInstances[0].DBInstanceStatus'` で `available` か確認 |
+| ログに `no pg_hba.conf entry ... no encryption` | 暗号化しない接続を RDS が拒否した | `SPRING_DATASOURCE_URL` の末尾に `?sslmode=require` が付いているか確認（`ecs.tf`。[インフラ設計書](infra-design.md) 7.2） |
 | ログに `password authentication failed` | DB パスワードの食い違い | Terraform を経由せずにパスワードを変えていないか確認。`terraform apply` で揃え直す |
 | ログに `FlywayValidateException` | 適用済みのマイグレーションファイルを編集した | 適用済みのファイルは編集しない（[データ設計書](data-design.md) 10.3）。元に戻して新しい連番のファイルを追加する |
 | ログに `OutOfMemoryError` / 終了コード 137 | メモリ不足 | タスク定義のメモリを増やす（費用も上がる） |

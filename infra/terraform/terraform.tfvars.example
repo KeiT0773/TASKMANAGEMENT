@@ -1,0 +1,9 @@
+# terraform.tfvars の記入例。次のコマンドで複写して使う（手順書 6.1 (1)）。
+#   cp infra/terraform/terraform.tfvars.example infra/terraform/terraform.tfvars
+# 再開・更新のスクリプト（infra/scripts/）は、この 2 つの値を自動で書き換える。
+
+# ECS で動かすイメージのタグ（Git のコミットの短縮ハッシュ。例："275fbd7"）
+backend_image_tag = ""
+
+# DB を復元するスナップショットの名前。空なら DB を新規に作る（例："taskmanagement-20261017-2130"）
+db_snapshot_identifier = ""

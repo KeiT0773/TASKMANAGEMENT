@@ -33,7 +33,36 @@
       "PowerShell(git branch -D *)",
       "PowerShell(git push --force*)",
       "PowerShell(git push -f *)",
-      "PowerShell(git push origin +*)"
+      "PowerShell(git push origin +*)",
+      "Read(~/.aws/credentials)",
+      "Bash(cat ~/.aws/credentials*)",
+      "PowerShell(Get-Content *credentials*)"
+    ],
+    "ask": [
+      "Bash(terraform *apply*)",
+      "Bash(terraform *destroy*)",
+      "Bash(terraform *import*)",
+      "Bash(terraform *state rm*)",
+      "Bash(terraform *state mv*)",
+      "Bash(terraform *force-unlock*)",
+      "Bash(bash infra/scripts/startup.sh*)",
+      "Bash(bash infra/scripts/shutdown.sh*)",
+      "Bash(bash infra/scripts/deploy-backend.sh*)",
+      "Bash(bash infra/scripts/deploy-frontend.sh*)",
+      "Bash(aws * create-*)",
+      "Bash(aws * delete-*)",
+      "Bash(aws * put-*)",
+      "Bash(aws * update-*)",
+      "Bash(aws * modify-*)",
+      "Bash(aws * start-*)",
+      "Bash(aws * stop-*)",
+      "Bash(aws s3 sync*)",
+      "Bash(aws s3 rm*)",
+      "Bash(aws s3 rb*)",
+      "PowerShell(terraform *apply*)",
+      "PowerShell(terraform *destroy*)",
+      "PowerShell(aws * create-*)",
+      "PowerShell(aws * delete-*)"
     ]
   },
   "hooks": {
