@@ -5,7 +5,7 @@
 | 項目 | 内容 |
 | --- | --- |
 | 文書名 | タスク管理アプリ AWS デプロイ手順書 |
-| 版数 | 1.3 |
+| 版数 | 1.4 |
 | 作成日 | 2026-10-11 |
 | 最終更新日 | 2026-10-17 |
 | 作成者 | KeiT0773 |
@@ -25,6 +25,7 @@ AWS・Terraform・IaC に初めて触れる前提で、各手順の前に「何�
 | 1.1 | 2026-10-11 | 使わない期間はすべてのリソースを `terraform destroy` で撤去する運用（[インフラ設計書](infra-design.md) 1.1）に合わせ、7. を「費用・休止・再開」に書き直した（スナップショットによるデータの引き継ぎ、休止・再開のスクリプト、利用をやめるときの片付け）。4.5 の予算を $20 に変更。6.1 の変数、8.、9.、10. を対応させて更新 | KeiT0773 |
 | 1.2 | 2026-10-17 | 要件定義書 7.「費用」の追加（リソースを無料利用枠と同じ規模に制限）に合わせ、2.3.4 に Fargate Spot と SSM パラメータストアを追加して Secrets Manager を削除。7.1 の費用（約 $0.07 / 時間）、8.、9.1 を更新し、9.5 から Secrets Manager の削除予定のエラーを除外 | KeiT0773 |
 | 1.3 | 2026-10-17 | Terraform のコードとスクリプトの作成に合わせて更新。1.2 にスクリプトの確認と `--yes` を追記。6.1 (4) の ECR のアドレスを AWS CLI で読む形に修正し、(5) の件数を実際の値（43 件）に。7.2・7.3 の手順を実装の順序に合わせ、8. にスキルと `permissions.ask` を明記。9.1 に暗号化しない接続のエラーを追加 | KeiT0773 |
+| 1.4 | 2026-10-17 | 要件定義書 7.「アクセス制御」の変更（自宅のネットワークだけ）に合わせ、2.3.4 に CloudFront Functions、6.5「自宅のネットワーク番号が変わったとき」、9.6「403 になる」を追加。7.3 の手順に許可リストの自動取得を追加し、9.5・10. を更新 | KeiT0773 |
 
 ### 1.2 本書のコマンドについて
 
@@ -194,6 +195,7 @@ Terraform で作ったリソースをコンソールで手作業で変えると�
 | CloudFront | 世界中に配置されたキャッシュサーバー網（CDN）。HTTPS の入口 | 利用者からの要求をすべて受け、画面は S3 から、`/api/*` は ALB から取ってくる |
 | OAC | CloudFront だけが S3 を読めるようにする仕組み | S3 を一般公開せずに画面を配信する |
 | VPC オリジン | CloudFront から、VPC の中（外部非公開）のリソースへ直接つなぐ仕組み | 内部 ALB を外に出さずに API を配信する |
+| CloudFront Functions | CloudFront で要求ごとに動く、短い JavaScript。月 200 万回まで無料 | アクセス元が自宅のネットワーク以外なら 403 を返す（[インフラ設計書](infra-design.md) 6.5） |
 | ALB | HTTP の要求を、後ろのサーバー群に振り分ける装置（ロードバランサー） | CloudFront から受けた API の要求を ECS タスクへ渡し、タスクの死活を監視する |
 | ECR | Docker イメージの置き場（Docker Hub の AWS 版） | Spring Boot のイメージを置く |
 | ECS | コンテナを動かし続ける仕組み。「このイメージを常に 1 つ動かしておく」と指示すると、落ちても立て直す | Spring Boot のコンテナを動かす |
@@ -669,6 +671,23 @@ $ terraform -chdir=infra/terraform plan
 
 `apply` は **PR をマージして `main` に取り込んだあと** に行う。ブランチ上のコードで `apply` すると、AWS の実物が `main` のコードより先に進んでしまい、他のブランチで `plan` したときに意図しない差分が出る。
 
+### 6.5 自宅のネットワーク番号が変わったとき
+
+アプリには、自宅のネットワーク（IPv6 のネットワーク番号）からだけアクセスできる（[インフラ設計書](infra-design.md) 6.5）。ルーターの再起動や回線の都合でネットワーク番号が変わると、画面が「403 このネットワークからはアクセスできません」になる。そのときは許可リストだけを更新する。
+
+```bash
+# いまの PC の IPv6 アドレス（前半 4 つの区切りがネットワーク番号）
+$ curl -6 https://api6.ipify.org
+
+# 許可リストを今のネットワーク番号に更新する（確認を求めたあと、数分で反映）
+$ bash infra/scripts/update-allowed-ip.sh
+```
+
+スクリプトは、今の IPv6 アドレスの先頭 64 ビット（例：`240d:1a:9e6:8c00::/64`）を `terraform.tfvars` の `allowed_viewer_ipv6_prefixes` に書き、`terraform apply` で CloudFront Functions の関数だけを更新する。それ以外のリソースが変更・削除される計画になっていたら中止する。
+
+- 休止中に変わった場合は何もしなくてよい。再開（`startup.sh`）のときに自動で今のネットワーク番号が使われる。
+- `curl -6` が失敗する（IPv6 で通信できない）ときは、アプリも使えない。ルーターの再起動などで IPv6 の接続を直す。
+
 ---
 
 ## 7. 費用・休止・再開
@@ -737,13 +756,14 @@ $ bash infra/scripts/startup.sh
 スクリプトは、6.1 の (3)〜(9) と同じことを一括で行う（20〜30 分）。
 
 1. 最新のスナップショットを探し、`terraform.tfvars` の `db_snapshot_identifier` に書く（無ければ空にして、DB を新規に作る）
-2. 作成されるリソースの件数を表示し、確認を求める（`y` で続行。ここから課金が始まる）
-3. ECR だけを先に作る（6.1 (3)。休止で ECR とイメージも消えているため）
-4. 今のコミットからイメージを作り、ECR に登録して、`backend_image_tag` を書き換える（6.1 (4)）
-5. `terraform plan` → `terraform apply`。計画に削除・作り直しが含まれていたら中止する
-6. ECS のタスクが起動するのを待つ（6.1 (7)）
-7. 画面をビルドして配置する（6.1 (8)）
-8. `/api/health/db` が 200 を返すことを確かめ、**新しい URL** を表示する
+2. この PC の IPv6 アドレスを調べ、自宅のネットワーク番号（先頭 64 ビット）を `allowed_viewer_ipv6_prefixes` に書く（6.5）。IPv6 で通信できなければ中止する
+3. 作成されるリソースの件数と、アクセスを許可するネットワークを表示し、確認を求める（`y` で続行。ここから課金が始まる）
+4. ECR だけを先に作る（6.1 (3)。休止で ECR とイメージも消えているため）
+5. 今のコミットからイメージを作り、ECR に登録して、`backend_image_tag` を書き換える（6.1 (4)）
+6. `terraform plan` → `terraform apply`。計画に削除・作り直しが含まれていたら中止する
+7. ECS のタスクが起動するのを待つ（6.1 (7)）
+8. 画面をビルドして配置する（6.1 (8)）
+9. `/api/health/db` が 200 を返すことを確かめ（IPv6 で接続）、**新しい URL** を表示する
 
 - **再開するたびに URL が変わる**（[インフラ設計書](infra-design.md) 3.2）。表示された URL をブラウザで開く。
 - スナップショットから DB を復元するため、休止前に登録したカードがそのまま表示される。
@@ -878,9 +898,20 @@ $ aws elbv2 describe-target-health --target-group-arn "$TG_ARN" \
 | `BucketAlreadyExists` | S3 のバケット名が世界のどこかで既に使われている | 名前にアカウント ID が入っているか確認する |
 | `destroy` が `DependencyViolation` で失敗した | ECS や CloudFront が使っていたネットワークインターフェースの解放が、まだ終わっていない | 数分待ってから、もう一度 `terraform destroy` する。消し終わったものは state から外れているので、残りだけが消える |
 | `DBSnapshotNotFound`（再開時） | `db_snapshot_identifier` に書いたスナップショットが無い | `aws rds describe-db-snapshots --snapshot-type manual` で名前を確認する |
+| `allowed_viewer_ipv6_prefixes が空です` | 許可するネットワークが決まっていない | `startup.sh` / `update-allowed-ip.sh` を使う。手で実行するときは `terraform.tfvars` に `allowed_viewer_ipv6_prefixes = ["xxxx:xxxx:xxxx:xxxx::/64"]` を書く（6.5） |
 | `apply` が途中で失敗した | 一部のリソースだけ作られた状態 | 慌てて消さない。原因を直してもう一度 `plan` → `apply` すれば、残りだけが作られる（state に作成済みのものが記録されているため） |
 
 ---
+
+### 9.6 画面や API が 403「このネットワークからはアクセスできません」になる
+
+アクセス元の制限（[インフラ設計書](infra-design.md) 6.5）で拒否されている。
+
+| 原因 | 確かめ方 | 対処 |
+| --- | --- | --- |
+| 自宅のネットワーク番号が変わった | `curl -6 https://api6.ipify.org` の前半 4 つの区切りと、`terraform.tfvars` の `allowed_viewer_ipv6_prefixes` を比べる | `bash infra/scripts/update-allowed-ip.sh`（6.5） |
+| ブラウザが IPv4 でつないでいる | `curl -4 -i <URL>` が 403、`curl -6 -i <URL>` が 200 になる | IPv4 は設計どおり拒否される。ブラウザが IPv6 を使えない状態（VPN、ルーターの設定）を直す |
+| 自宅以外のネットワーク（モバイル回線など）から開いている | — | 設計どおり（要件定義書 8.）。自宅のネットワークから開く |
 
 ## 10. コマンド早見表
 
@@ -897,5 +928,7 @@ $ aws elbv2 describe-target-health --target-group-arn "$TG_ARN" \
 | アプリのログ | `MSYS_NO_PATHCONV=1 aws logs tail /ecs/taskmanagement-backend --follow` |
 | 休止（スナップショット → すべて撤去） | `bash infra/scripts/shutdown.sh` |
 | 再開（作り直し → 新しい URL を表示） | `bash infra/scripts/startup.sh` |
+| 自宅のネットワーク番号が変わったとき | `bash infra/scripts/update-allowed-ip.sh` |
+| 今の IPv6 アドレス | `curl -6 https://api6.ipify.org` |
 | Terraform が管理しているものの一覧 | `terraform -chdir=infra/terraform state list` |
 | スナップショットの一覧 | `aws rds describe-db-snapshots --snapshot-type manual --query 'DBSnapshots[].[DBSnapshotIdentifier,SnapshotCreateTime]' --output table` |

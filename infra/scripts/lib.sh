@@ -80,16 +80,48 @@ ensure_tfvars() {
   fi
 }
 
-# terraform.tfvars の 1 項目を書き換える（無ければ末尾に追加）
-set_tfvar() {
+# terraform.tfvars の 1 項目を書き換える（無ければ末尾に追加）。
+# set_tfvar は文字列として（"..." で囲んで）、set_tfvar_raw は値をそのまま（リストなど）書く。
+set_tfvar_raw() {
   local key="$1" value="$2"
   ensure_tfvars
   if grep -qE "^${key}[[:space:]]*=" "${TFVARS}"; then
-    sed -i "s|^${key}[[:space:]]*=.*|${key} = \"${value}\"|" "${TFVARS}"
+    sed -i "s|^${key}[[:space:]]*=.*|${key} = ${value}|" "${TFVARS}"
   else
-    printf '%s = "%s"\n' "${key}" "${value}" >> "${TFVARS}"
+    printf '%s = %s\n' "${key}" "${value}" >> "${TFVARS}"
   fi
-  info "terraform.tfvars: ${key} = \"${value}\""
+  info "terraform.tfvars: ${key} = ${value}"
+}
+
+set_tfvar() {
+  set_tfvar_raw "$1" "\"$2\""
+}
+
+# --- アクセス元の制限（インフラ設計書 6.5） -----------------------------------------
+# この PC の IPv6 アドレスを外部のサービスで調べ、先頭 64 ビット（自宅のネットワーク番号）を
+# "xxxx:xxxx:xxxx:xxxx::/64" の形で出力する。IPv6 で通信できなければ中止する。
+detect_ipv6_prefix() {
+  local addr
+  addr="$(curl -s -6 -m 10 https://api6.ipify.org)" || true
+  [ -n "${addr}" ] || die "IPv6 で通信できません。アプリは自宅の IPv6 のネットワークからだけ使えるため、IPv6 の接続を確かめてください（手順書 9.6）。"
+  # :: の省略を展開し、先頭 4 つの区切りを取り出す（node は画面のビルドで使うため、必ず入っている）
+  node -e '
+    const a = process.argv[1];
+    const [h, t] = a.split("::");
+    const head = h ? h.split(":") : [];
+    const tail = t ? t.split(":") : [];
+    const parts = a.includes("::") ? [...head, ...Array(8 - head.length - tail.length).fill("0"), ...tail] : head;
+    if (parts.length !== 8 || !parts.every((p) => /^[0-9a-f]{1,4}$/i.test(p))) process.exit(1);
+    console.log(parts.slice(0, 4).map((p) => parseInt(p, 16).toString(16)).join(":") + "::/64");
+  ' "${addr}" || die "IPv6 アドレスとして読めない値が返りました: ${addr}"
+}
+
+# 自宅のネットワーク番号を調べて、terraform.tfvars の許可リストに書く
+configure_allowlist() {
+  step "この PC の IPv6 のネットワーク番号を調べる（アクセスを許可する範囲）"
+  ALLOWED_PREFIX="$(detect_ipv6_prefix)"
+  info "許可するネットワーク: ${ALLOWED_PREFIX}（このネットワークにつながった端末からだけ使える）"
+  set_tfvar_raw allowed_viewer_ipv6_prefixes "[\"${ALLOWED_PREFIX}\"]"
 }
 
 # --- 計画の検査 -------------------------------------------------------------------
