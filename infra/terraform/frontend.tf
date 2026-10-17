@@ -1,6 +1,7 @@
 # 画面の配信（S3 + CloudFront）と、API への振り分け（VPC オリジン）。インフラ設計書 6.。
 #   /*      → S3（画面の静的ファイル。OAC で CloudFront からだけ読める）
 #   /api/*  → 内部 ALB（VPC オリジン。インターネットからは直接届かない）
+# どちらも、自宅の IPv6 のネットワーク以外からの要求は、CloudFront Functions が 403 で拒否する（6.5）。
 
 data "aws_caller_identity" "current" {}
 
@@ -67,6 +68,29 @@ resource "aws_cloudfront_vpc_origin" "api" {
   }
 }
 
+# --- アクセス元の制限（CloudFront Functions、6.5） ----------------------------------
+# 許可した IPv6 のネットワーク番号以外からの要求に 403 を返す。コードは functions/viewer-allowlist.js。
+resource "aws_cloudfront_function" "viewer_allowlist" {
+  name    = "${var.project}-viewer-allowlist"
+  runtime = "cloudfront-js-2.0"
+  comment = "Allow only the home IPv6 network"
+  publish = true # 保存と同時に本番（LIVE）に反映する
+
+  # コードの中の目印を、許可リスト（JSON の配列）に置き換える
+  code = replace(
+    file("${path.module}/functions/viewer-allowlist.js"),
+    "%%ALLOWED_PREFIXES%%",
+    jsonencode(var.allowed_viewer_ipv6_prefixes)
+  )
+
+  lifecycle {
+    precondition {
+      condition     = length(var.allowed_viewer_ipv6_prefixes) > 0
+      error_message = "allowed_viewer_ipv6_prefixes が空です。誰もアクセスできなくなるため中止しました。startup.sh / update-allowed-ip.sh を使うか、terraform.tfvars に自宅の IPv6 のネットワーク番号を書いてください（手順書 6.5）。"
+    }
+  }
+}
+
 # --- AWS が用意しているキャッシュの設定（6.1） ---------------------------------------
 data "aws_cloudfront_cache_policy" "caching_optimized" {
   name = "Managed-CachingOptimized"
@@ -112,6 +136,11 @@ resource "aws_cloudfront_distribution" "main" {
     cached_methods         = ["GET", "HEAD"]
     cache_policy_id        = data.aws_cloudfront_cache_policy.caching_optimized.id
     compress               = true
+
+    function_association {
+      event_type   = "viewer-request"
+      function_arn = aws_cloudfront_function.viewer_allowlist.arn
+    }
   }
 
   # /api/*：バックエンドへ転送する。キャッシュせず、ヘッダー・クエリ・本文をすべて渡す
@@ -124,6 +153,11 @@ resource "aws_cloudfront_distribution" "main" {
     cache_policy_id          = data.aws_cloudfront_cache_policy.caching_disabled.id
     origin_request_policy_id = data.aws_cloudfront_origin_request_policy.all_viewer_except_host.id
     compress                 = true
+
+    function_association {
+      event_type   = "viewer-request"
+      function_arn = aws_cloudfront_function.viewer_allowlist.arn
+    }
   }
 
   restrictions {
