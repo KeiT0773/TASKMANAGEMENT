@@ -64,6 +64,10 @@ gh pr merge --squash
 - `main` へのローカル merge（マージは必ず GitHub 上の PR で行う）
 - `main` ブランチの削除
 
+次は Claude の設定（`.claude/settings.json` の `deny`）で禁止している。頼まれても実行せず、必要なら本人がブラウザの GitHub の画面で行う。
+
+- GitHub リポジトリの削除・アーカイブ・名前の変更（`gh repo delete` / `archive` / `rename`、`gh api` での `DELETE`）
+
 ### ブランチ命名規則
 
 ```
@@ -201,6 +205,7 @@ npm run dev
 AWS への構築・更新・休止・再開と、`infra/` の Terraform・スクリプトの実行は、スキル `deploy-aws`（[.claude/skills/deploy-aws/SKILL.md](.claude/skills/deploy-aws/SKILL.md)）に従う。
 
 - AWS の実物を変える操作は、内容（計画の集計など）を示して利用者の承認を得てから行う。スクリプトの `--yes` は承認後にだけ付ける
+- 撤去（`terraform destroy`、`shutdown.sh`、`aws ... delete-*`）は、消えるものを示し、その会話の中で利用者が明示的に承認してから実行する。前の承認は使い回さず、`-auto-approve` は付けない
 - `~/.aws/credentials` を読まない。アクセスキーを会話に出さない
 - 作業の最後に、稼働中か休止中かを報告する（稼働中は約 $0.07 / 時間かかる。[インフラ設計書](docs/infra-design.md) 11.）
 - リソースの規模は [インフラ設計書](docs/infra-design.md) 2.1 の上限（無料利用枠と同じ規模）を超えない
