@@ -12,7 +12,8 @@ description: このアプリを AWS に構築・更新・休止・再開する�
 | 約束 | 理由 |
 | --- | --- |
 | 作業の最初に `aws sts get-caller-identity` を実行し、アカウント（`512795167785`）と IAM ユーザーを報告する | 意図しないアカウントを操作しないため |
-| AWS の実物を変える操作（`terraform apply` / `destroy`、`startup.sh`、`shutdown.sh`、`deploy-backend.sh`、`aws ... create-*` / `delete-*`）は、**何が起きるかを示して利用者が承認してから**実行する | 取り消せない操作や、課金が始まる操作であるため |
+| AWS の実物を変える操作（`terraform apply` / `destroy`、`startup.sh`、`shutdown.sh`、`deploy-backend.sh`、`aws ... create-*` / `delete-*`）は、**何が起きるかを示して利用者が承認してから**実行する。特に撤去（destroy・delete）は、3. の手順で毎回確認する | 取り消せない操作や、課金が始まる操作であるため |
+| **GitHub のリポジトリを削除しない**（`KeiT0773/TASKMANAGEMENT` を含む）。`gh repo delete`、`gh api` での `DELETE`、アーカイブ・名前の変更・公開範囲の変更も行わない。頼まれた場合も実行せず、本人がブラウザの GitHub の設定画面で行うよう伝える | 文書・コード・PR の履歴がすべて失われ、戻せないため。`.claude/settings.json` の `deny` でも止めている |
 | スクリプトの `--yes` は、同じ内容を一度 `--yes` なしで実行して計画を示し、利用者が承認したあとにだけ付ける | `--yes` は確認を省略するため |
 | `~/.aws/credentials` を読まない。アクセスキーを会話に出さない | キーの漏えいを防ぐ（手順書 4.4） |
 | `rm` は使えない（`.claude/settings.json` で禁止）。一時ファイルは作業用フォルダーに置く | — |
@@ -62,7 +63,37 @@ terraform -chdir=infra/terraform output app_url                   # 稼働中な
 - 「IPv6 で通信できません」：アプリは自宅の IPv6 のネットワークからだけ使える。利用者に IPv6 の接続（ルーター、VPN）を確かめてもらう
 - それ以外のエラーは、手順書 9. のトラブルシューティングで原因を調べ、分かったことを報告してから次の操作を相談する
 
-## 3. 確認（稼働中）
+## 3. destroy（撤去）の前に必ず行うこと
+
+撤去は取り消せない。DB のデータ、S3 の画面のファイル、ECR のイメージは消えると戻らない。次の操作は、**その会話の中で利用者が内容を見て明示的に承認したあとにだけ**実行する。
+
+| 対象の操作 |
+| --- |
+| `terraform destroy`、`terraform apply` に `-destroy` で作った計画を渡すもの、`terraform state rm` |
+| `bash infra/scripts/shutdown.sh --yes`（休止。中で `terraform destroy` を行う） |
+| `aws ... delete-*`、`aws ... terminate-*`、`aws s3 rm`、`aws s3 rb`（スナップショット・バケット・予算などの削除） |
+
+**手順**
+
+1. **消えるものを示す。** `terraform plan -destroy`（または `--yes` なしの `shutdown.sh`）で、件数と主なリソースを要約する。RDS・スナップショット・S3 の中身が含まれるかを必ず書く
+2. **結果を伝える。** 取り消せないこと、データがどうなるか（スナップショットを取るか、取らずに消えるか）、費用がどう変わるか、URL が変わること
+3. **承認を得る。** 利用者の返事で「消してよい」と明示されたことを確かめてから実行する。返事があいまいなら、もう一度確かめる
+4. **結果を確かめる。** `terraform state list` が空か、残ったもの（スナップショット・state 用バケット・予算）を報告する
+
+**禁止すること**
+
+- 前の承認を使い回さない。以前「休止して」と言われていても、撤去のたびに 1.〜3. を行う。計画で示した内容と違うものを消すことになったら、改めて承認を得る
+- `-auto-approve` を destroy に付けない（`.claude/settings.json` の `deny` でも止めている）
+- `shutdown.sh --yes` は、同じ内容を `--yes` なしで示して承認を得た直後にだけ使う
+- スクリプトが「想定外の削除・作り直し」で止めたときに、手でコマンドを打って押し切らない
+
+**利用者が手動（コンソール）で削除したとき**
+
+Terraform の外で消すと、state（台帳）には「まだある」と記録が残り、実物と食い違う。その場合は、次の 2 点を利用者に伝え、どちらも確認を取ってから行う。
+- `terraform plan` で食い違いを確かめる（消えたものは「作成」として表示される）
+- state を整理するか（`terraform state rm`、または全部消えたなら state 用バケットの削除。手順書 7.4）
+
+## 4. 確認（稼働中）
 
 ```bash
 APP_URL=$(terraform -chdir=infra/terraform output -raw app_url)
@@ -72,7 +103,7 @@ curl -4 -i "${APP_URL}/api/health"     # 403（IPv4 は拒否される。設計�
 MSYS_NO_PATHCONV=1 aws logs tail /ecs/taskmanagement-backend --since 30m
 ```
 
-## 4. 作業の終わりに報告すること
+## 5. 作業の終わりに報告すること
 
 - 稼働中か休止中か（`terraform state list` が空かどうか）
 - 稼働中なら URL と、約 0.07 ドル / 時間かかっていること

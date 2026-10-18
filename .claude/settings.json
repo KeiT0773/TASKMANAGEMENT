@@ -36,7 +36,21 @@
       "PowerShell(git push origin +*)",
       "Read(~/.aws/credentials)",
       "Bash(cat ~/.aws/credentials*)",
-      "PowerShell(Get-Content *credentials*)"
+      "PowerShell(Get-Content *credentials*)",
+      "Bash(gh repo delete*)",
+      "Bash(gh repo archive*)",
+      "Bash(gh repo rename*)",
+      "Bash(gh api *DELETE*)",
+      "Bash(gh api *delete*)",
+      "Bash(terraform *destroy*-auto-approve*)",
+      "Bash(terraform *-auto-approve*destroy*)",
+      "PowerShell(gh repo delete*)",
+      "PowerShell(gh repo archive*)",
+      "PowerShell(gh repo rename*)",
+      "PowerShell(gh api *DELETE*)",
+      "PowerShell(gh api *delete*)",
+      "PowerShell(terraform *destroy*-auto-approve*)",
+      "PowerShell(terraform *-auto-approve*destroy*)"
     ],
     "ask": [
       "Bash(terraform *apply*)",
